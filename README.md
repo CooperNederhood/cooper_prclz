@@ -1,6 +1,7 @@
 # Cleaned and commented code for Million Neighborhoods Project written by Cooper Nederhood
+## Data download and processing
 
-### 1. Download GADM data
+#### 1. Download GADM data
 The GADM data provides boundaries which we use to partition the globe into computationally feasible parts
 From within data_processing/
 ```
@@ -8,17 +9,17 @@ python3 download_gadm.py
 ```
 
 
-### 2. Download Geofabrik data
+#### 2. Download Geofabrik data
 We use Geofabrik to get our OpenStreetMap raw data. Download this for all regions via the following command.
 From within data_processing/
 ```
 python3 fetch_geofabrik_data.py
 ```
 
-### 3. Extract buildings and lines from the raw Geofabrik data
+#### 3. Extract buildings and lines from the raw Geofabrik data
 The raw Geofabrik data is split into country-level files. This step creates a "buildings" and a "lines" file for each country. The files are in "/data/geojson/"
 
-### 4. Split the country-specific building files by GADM
+#### 4. Split the country-specific building files by GADM
 Each country-level file is simply too huge for efficient computation. So, use the GADM boundaries to split the buildings files.
 From within data_processing/
 ```
@@ -28,4 +29,12 @@ NOTE: the default behavior is to process All the countries but if you want to pr
 3-letter country code contained in "country_codes.csv"
 ```
 python3 split_geojson.py --gadm_name DJI
+```
+## Reblocking
+There are options for reblocking depending on whether you want to reblock an entire country, just certain GADMs, and just certain blocks. 
+
+```
+python3 i_reblock.py --region {Africa|Asia|Australia-Oceania|Central-America|Europe|North-America|South-America} \
+                     --gadm_name DJI \
+         
 ```
