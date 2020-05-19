@@ -1,4 +1,4 @@
-# Cleaned and commented code for Million Neighborhoods Project written by Cooper Nederhood
+# Cleaned and commented code for Million Neighborhoods Project
 ## Data download and processing
 
 #### 1. Download GADM data
