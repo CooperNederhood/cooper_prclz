@@ -23,10 +23,16 @@ import time
 import tqdm 
 
 # DEFINE GLOBAL PATHS
-sys.path.insert("../")
+sys.path.insert(0, "../")
 from data_processing.setup_paths import *
 
-
+def block_to_gadm(block:str) -> str:
+    '''
+    Just grabs the GADM from a block
+    '''
+    block_rev = block[::-1]
+    idx = block_rev.index("_") + 1
+    return block[0:-idx]
 
 def add_buildings(graph: PlanarGraph, buildings: List[Tuple]):
 
@@ -101,11 +107,11 @@ class CheckPointer:
     prior work exists, etc
     '''
 
-    def __init__(self, region: str, gadm: str, gadm_code: str, drop_already_completed: bool, digital_globe_data:bool):
+    def __init__(self, region: str, gadm: str, gadm_code: str, drop_already_completed: bool):
 
-        reblock_stub = "dg_reblock" if digital_globe_data else "reblock"
+        reblock_stub =  "reblock"
 
-        self.reblock_path = os.path.join(DATA, reblock_stub, region, gadm_code)
+        self.reblock_path = os.path.join(DATA_PATH, reblock_stub, region, gadm_code)
         if not os.path.exists(self.reblock_path):
             os.makedirs(self.reblock_path)
         self.summary_path = os.path.join(self.reblock_path, "reblock_summary_{}.csv".format(gadm))
@@ -213,23 +219,20 @@ def add_outside_node(block_geom, building_list):
     return building_list 
 
 def reblock_gadm(region, gadm_code, gadm, simplify, block_list=None, only_block_list=False, 
-                 drop_already_completed=True, digital_globe_data=False, mins_threshold=np.inf):
+                 drop_already_completed=True, mins_threshold=np.inf):
     '''
     Does reblocking for an entire GADM boundary
 
     Inputs:
         - region: (str) region, one of [Africa  Asia  Australia-Oceania  Central-America  Europe  North-America  South-America]
     '''
+    if block_list is not None and gadm is None:
+        gadm = block_to_gadm(block_list[0])
     block_list = [] if block_list is None else block_list
 
     # (1) Just load our data for one GADM
-    
-    if digital_globe_data:
-        print("Begin loading of Digital Globe data--{}-{}".format(region, gadm))
-        parcels, buildings, blocks = i_topology_utils.load_reblock_inputs_dg(region, gadm_code, gadm)         
-    else:
-        print("Begin loading of data--{}-{}".format(region, gadm))
-        parcels, buildings, blocks = i_topology_utils.load_reblock_inputs(region, gadm_code, gadm) 
+    print("Begin loading of data--{}-{}".format(region, gadm))
+    parcels, buildings, blocks = i_topology_utils.load_reblock_inputs(region, gadm_code, gadm) 
 
     buildings['in_target'] = buildings['block_id'].apply(lambda x: x not in block_list)
     buildings.sort_values(by=['in_target', 'building_count'], inplace=True)
@@ -237,7 +240,7 @@ def reblock_gadm(region, gadm_code, gadm, simplify, block_list=None, only_block_
     checkpoint_every = 1
 
     # (2) Create a checkpointer which will handle saving and restoring of past work
-    checkpointer = CheckPointer(region, gadm, gadm_code, drop_already_completed, digital_globe_data)
+    checkpointer = CheckPointer(region, gadm, gadm_code, drop_already_completed)
     possible_buildings = buildings['block_id'].values[0:len(block_list)] if only_block_list else buildings['block_id']
     all_blocks = [b for b in possible_buildings if b not in checkpointer.completed]
 
@@ -310,7 +313,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Do reblocking on a GADM')
     parser.add_argument('--region', type=str, required=True, help="region to process")
     parser.add_argument('--gadm_name', dest='gadm_code', type=str, required=True, help="3-digit country gadm code to process")
-    parser.add_argument('--gadm', help='process this gadm, if not supplied will process all GADMs', default=None)
+    parser.add_argument('--gadm', help='process this gadm', default=False)
     parser.add_argument('--simplify', help='boolean to simplify the graph or not', action='store_true')
     parser.add_argument('--blocks', dest='block_list', help='prioritize these block ids', nargs='*', type=str)
     parser.add_argument('--only_block_list', help='limit reblocking to specified blocks', action='store_true')
@@ -326,8 +329,8 @@ if __name__ == "__main__":
         all_gadms = [f.stem.replace("buildings_", "").replace("parcels_", "") for f in dir_path.iterdir()]
         for gadm in all_gadms:
             args_dict['gadm'] = gadm 
-            print("Beginning reblock for {}-{}".format(args_dict['region'],  args_dict['gadm']))
+            print("Beginning reblock for {}-{}".format(args_dict['region'],  args_dict['gadm_code']))
             reblock_gadm(**args_dict)
     else:   
-        print("Beginning reblock for {}-{}".format(args_dict['region'], args_dict['gadm']))
+        print("Beginning reblock for {}-{}".format(args_dict['region'], args_dict['gadm_code']))
         reblock_gadm(**args_dict)

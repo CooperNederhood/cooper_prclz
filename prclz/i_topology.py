@@ -18,7 +18,7 @@ import pandas as pd
 import geopandas as gpd
 
 # DEFINE GLOBAL PATHS
-sys.path.insert("../")
+sys.path.insert(0, "../")
 from data_processing.setup_paths import *
 
 
