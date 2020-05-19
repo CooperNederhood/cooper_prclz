@@ -16,7 +16,7 @@ From within data_processing/
 python3 fetch_geofabrik_data.py
 ```
 
-#### 3. Extract buildings and lines from the raw Geofabrik data
+#### 3. Extract buildings and lines from the raw Geofabrik data [SATEJ]
 The raw Geofabrik data is split into country-level files. This step creates a "buildings" and a "lines" file for each country. The files are in "/data/geojson/"
 
 #### 4. Split the country-specific building files by GADM
