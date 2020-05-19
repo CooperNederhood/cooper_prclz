@@ -22,16 +22,15 @@ from i_topology import *
 import time 
 import tqdm 
 
-#ROOT = "../"
-ROOT = Path(__file__).resolve().parent.parent 
-DATA = os.path.join(ROOT, "data")
-TRANS_TABLE = pd.read_csv(os.path.join(ROOT, "data_processing", 'country_codes.csv'))
+# DEFINE GLOBAL PATHS
+sys.path.insert("../")
+from data_processing.setup_paths import *
+
 
 
 def add_buildings(graph: PlanarGraph, buildings: List[Tuple]):
 
     total_blgds = len(buildings)
-    #print("\t\tbuildings....")
     for i, bldg_node in enumerate(buildings):
         graph.add_node_to_closest_edge(bldg_node, terminal=True)
 
@@ -310,12 +309,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Do reblocking on a GADM')
     parser.add_argument('--region', type=str, required=True, help="region to process")
-    parser.add_argument('--gadm_code', type=str, required=True, help="3-digit country gadm code to process")
+    parser.add_argument('--gadm_name', dest='gadm_code', type=str, required=True, help="3-digit country gadm code to process")
     parser.add_argument('--gadm', help='process this gadm, if not supplied will process all GADMs', default=None)
     parser.add_argument('--simplify', help='boolean to simplify the graph or not', action='store_true')
     parser.add_argument('--blocks', dest='block_list', help='prioritize these block ids', nargs='*', type=str)
     parser.add_argument('--only_block_list', help='limit reblocking to specified blocks', action='store_true')
-    parser.add_argument('--dg', dest='digital_globe_data', help='adding flag indicates to use DG data', action='store_true')
     parser.add_argument('--from_dir', help='process all the gadms in this directory', type=str, default=None)
     parser.add_argument('--mins_threshold', help='will break if block takes more than this num of mins', type=int)
     

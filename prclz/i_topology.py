@@ -17,10 +17,11 @@ import geopy.distance as gpy
 import pandas as pd 
 import geopandas as gpd
 
-# These two globals control the growth of the buffer when we search for intersecting
-#     lines when we add a node to the closest edge. They may be suboptimal
-BUF_EPS = 1e-4
-BUF_RATE = 2
+# DEFINE GLOBAL PATHS
+sys.path.insert("../")
+from data_processing.setup_paths import *
+
+
 
 def igraph_steiner_tree(G, terminal_vertices, weight='weight'):
     '''

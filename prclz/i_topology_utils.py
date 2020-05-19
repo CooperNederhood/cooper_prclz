@@ -1,5 +1,5 @@
 import typing 
-from typing import Union 
+from typing import Union, Tuple 
 from itertools import combinations, chain, permutations
 
 import geopandas as gpd
@@ -18,24 +18,11 @@ import argparse
 from i_topology import PlanarGraph
 
 # DEFINE GLOBAL PATHS
-ROOT = "../"
-DATA_PATH = os.path.join(ROOT, "data")
-
-BLOCK_PATH = os.path.join(DATA_PATH, "blocks")
-BLDGS_PATH = os.path.join(DATA_PATH, "buildings")
-PARCELS_PATH = os.path.join(DATA_PATH, "parcels")
-LINES_PATH = os.path.join(DATA_PATH, "lines")
-COMPLEXITY_PATH = os.path.join(DATA_PATH, "complexity")
-
-DG_BLDGS_PATH = os.path.join(DATA_PATH, "dg_buildings")
-DG_PARCELS_PATH = os.path.join(DATA_PATH, "dg_parcels")
-
-THRESHOLD_METERS = 1
-WATERWAY_WEIGHT = 1e5 
-NATURAL_WEIGHT = 1e5
+sys.path.insert("../")
+from data_processing.setup_paths import *
 
 
-def point_to_node(point: Point):
+def point_to_node(point: Point) -> Tuple[float]:
     '''
     Helper function to convert shapely.Point -> Tuple
     '''

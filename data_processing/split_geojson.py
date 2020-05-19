@@ -13,10 +13,7 @@ import sys
 
 import argparse
 
-BLOCK_PATH = "../data/blocks"
-GEOJSON_PATH = "../data/geojson"
-TRANS_TABLE = pd.read_csv('country_codes.csv')
-DATA_PATH = "../data"
+from setup_paths import *
 
 def geofabrik_to_gadm(geofabrik_name):
     country_info = TRANS_TABLE[TRANS_TABLE['geofabrik_name'] == geofabrik_name]
@@ -70,8 +67,6 @@ def split_files_alt(file_name: str, trans_table: pd.DataFrame, return_all_blocks
     GADM boundaries and block file
     '''
 
-    print("FILE IS HERE")
-
     geofabrik_name = file_name.replace("_buildings.geojson", "").replace("_lines.geojson", "")
     
     if gadm_name is None or region is None:
@@ -104,11 +99,6 @@ def split_files_alt(file_name: str, trans_table: pd.DataFrame, return_all_blocks
     except:
         print("WARNING - country {} / {} could not load GeoJSON file".format(geofabrik_name, gadm_name))
         return None, "load_geojson_error"
-
-    # NOTE -- no longer applying convex hull transform
-    # # Apply convex hull transform to our buildings
-    # if input_type == "buildings":
-    #     buildings['geometry'] = buildings['geometry'].convex_hull
 
     cols = [c for c in geojson_objects.columns]
     cols.append('gadm_code')
@@ -334,18 +324,21 @@ if __name__ == "__main__":
 
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--path_to_file", help="path to a country-specific *buildings.geojson or *lines.geojson file", type=str)
-    parser.add_argument("--gadm_name", help="if the geojson file corresponds to 2 countries, you can specify the unique GADM code", type=str)
+    parser.add_argument("--gadm_name", default='All', type=str, 
+                        help="The default is to process All the countries, but if you want to process only one country then you can specify a 3-letter GADM country code")
     parser.add_argument("--replace", help="default behavior is to skip if the country has been processed. Adding this option replaces the files",
                          action="store_true")
     
     args = parser.parse_args()
 
-    if args.path_to_file is None:
+    if args.gadm_name == "All":
+        gadm_names = TRANS_TABLE['gadm_name']
+    else:
+        gadm_names = [args.gadm_name]  
+
+    for gadm_name in gadm_names:
         geofabrik_name = TRANS_TABLE[TRANS_TABLE['gadm_name']==args.gadm_name]['geofabrik_name'].iloc[0]
         file_name = geofabrik_name + "_buildings.geojson"
-    else:
-        file_name = args.path_to_file.split("/")[-1]
-    REPLACE = args.replace 
 
-    main(file_name, REPLACE, args.gadm_name)
+        main(file_name, args.replace, gadm_name)
+        

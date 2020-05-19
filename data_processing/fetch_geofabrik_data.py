@@ -7,21 +7,13 @@ import os
 import sys 
 import wget
 
-# Paths
-ROOT = "../"
-BLOCK_PATH = os.path.join(ROOT, "data", "blocks")    # Africa
-GEOJSON_PATH = os.path.join(ROOT, "data", "geojson") #"../data/geojson/Africa"
-GADM_GEOJSON_PATH = os.path.join(ROOT, "data", "geojson_gadm") #"../data/geojson_gadm/Africa"
-GEOFABRIK_PATH = os.path.join(ROOT, "data", "input")
-
-TRANS_TABLE = pd.read_csv(os.path.join(ROOT, "data_processing", 'country_codes.csv'))
+from setup_paths import *
 
 
-#http://download.geofabrik.de/africa/algeria-latest.osm.pbf
 def urlexists_stream(uri: str) -> bool:
-	'''
-	Tests whether a URL is a valid address 
-	'''
+    '''
+    Tests whether a URL is a valid address 
+    '''
     try:
         with requests.get(uri, stream=True) as response:
             try:
@@ -33,9 +25,9 @@ def urlexists_stream(uri: str) -> bool:
         return False
 
 def make_url(geo_name: str, geo_region: str) -> str:
-	'''
-	Simple helper to construct the geofabrik download URL given the name and region
-	'''
+    '''
+    Simple helper to construct the geofabrik download URL given the name and region
+    '''
 
     url = "http://download.geofabrik.de/{}/{}-latest.osm.pbf".format(geo_region, geo_name)
 
@@ -47,12 +39,12 @@ def make_url(geo_name: str, geo_region: str) -> str:
 
     return url 
 
-def download_data(geofabrik_name: str, geofabrik_region: str):
-	'''
-	Given a geofabrik country name and the corresponding region, downloads the 
-	geofabrik pbf file which contains all OSM data for that country. Checks whether
-	the data has already been downloaded
-	'''
+def download_data(geofabrik_name: str, geofabrik_region: str) -> None:
+    '''
+    Given a geofabrik country name and the corresponding region, downloads the 
+    geofabrik pbf file which contains all OSM data for that country. Checks whether
+    the data has already been downloaded
+    '''
 
     outfile = geofabrik_name + "-latest.osm.pbf"
 
