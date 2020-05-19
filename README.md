@@ -22,9 +22,13 @@ The raw Geofabrik data is split into country-level files. This step creates a si
 #### 4. Block extraction [SATEJ]
 Blocks are defined as regions fully circumscribed by roads or natural boundaries. Blocks are our most granular unit of analysis. This step extracts those blocks.
 
-#### 4. Split the country-specific building files by GADM
+#### 5. Split the country-specific building files by GADM
 Each country-level file is simply too huge for efficient computation. So, use the GADM boundaries to split the buildings files. This also functions as a data validation and QC point because along with the processed output in "/data/" the script will output country-level summaries about the matching of the OSM buildings with the GADM boundaries including list of non-matched buildings and a .png summary of the matching. 
 From within data_processing/
+
+#### 6. Block complexity [SATEJ]
+
+#### 7. Parcelization [NICO]
 ```
 python3 split_geojson.py 
 ```
