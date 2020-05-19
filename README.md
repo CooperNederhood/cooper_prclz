@@ -25,10 +25,6 @@ Blocks are defined as regions fully circumscribed by roads or natural boundaries
 #### 5. Split the country-specific building files by GADM
 Each country-level file is simply too huge for efficient computation. So, use the GADM boundaries to split the buildings files. This also functions as a data validation and QC point because along with the processed output in "/data/" the script will output country-level summaries about the matching of the OSM buildings with the GADM boundaries including list of non-matched buildings and a .png summary of the matching. 
 From within data_processing/
-
-#### 6. Block complexity [SATEJ]
-
-#### 7. Parcelization [NICO]
 ```
 python3 split_geojson.py 
 ```
@@ -37,6 +33,12 @@ NOTE: the default behavior is to process All the countries but if you want to pr
 ```
 python3 split_geojson.py --gadm_name DJI
 ```
+
+#### 6. Block complexity [SATEJ]
+
+#### 7. Parcelization [NICO]
+
+
 ## Reblocking
 There are options for reblocking depending on whether you want to reblock an entire country, just certain GADMs, and just certain blocks. 
 
