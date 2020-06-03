@@ -21,7 +21,8 @@ import geopandas as gpd
 sys.path.insert(0, "../")
 from data_processing.setup_paths import *
 
-
+BUF_EPS = 1e-4
+BUF_RATE = 2
 
 def igraph_steiner_tree(G, terminal_vertices, weight='weight'):
     '''
