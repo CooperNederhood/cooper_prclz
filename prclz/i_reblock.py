@@ -47,13 +47,22 @@ def add_buildings(graph: PlanarGraph, buildings: List[Tuple]):
 def clean_graph(graph):
     is_conn = graph.is_connected()
     if is_conn:
+        print("Graph is connected...")
         return graph, 1
     else:
+        print("Graph is NOT connected...")
         components = graph.components(mode=igraph.WEAK)
         num_components = len(components)
         comp_sizes = [len(idxs) for idxs in components]
         arg_max = np.argmax(comp_sizes)
         comp_indices = components[arg_max]
+
+        print("len comp_indices = {}".format(len(comp_indices)))
+        print("num_components = {}".format(num_components))
+        print("comp_sizes = {}".format(comp_sizes))
+    
+        sub = graph.subgraph(comp_indices)
+        print("Thru...")
 
         return graph.subgraph(comp_indices), num_components
 
