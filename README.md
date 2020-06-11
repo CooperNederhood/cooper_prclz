@@ -49,16 +49,16 @@ python3 i_reblock.py --region Africa --gadm_name DJI --gadm DJI.1.1_1 --simplify
 ```
 ##### Process an entire GADM, but put specific blocks first, ahead of other blocks within the GADM
 ```
-python3 i_reblock.py --region Africa --gadm_name DJI --blocks DJI.1.1_1_2 DJI.1.1_1_4 --simplify
+python3 i_reblock.py --region Africa --gadm_name DJI --gadm DJI.1.1_1 --blocks DJI.1.1_1_2 DJI.1.1_1_4 --simplify
 ```
 ##### Process only those specific blocks, not the entire GADM
 ```
-python3 i_reblock.py --region Africa --gadm_name DJI --blocks DJI.1.1_1_2 DJI.1.1_1_4 --simplify --only_block_list
+python3 i_reblock.py --region Africa --gadm_name DJI --gadm DJI.1.1_1 --blocks DJI.1.1_1_2 DJI.1.1_1_4 --simplify --only_block_list
 ```
 
 ##### Because we have split out inputs by GADM, we can just reblock all the GADMs in a specific directory, essentially reblocking the entire country
 ```
-python3 i_reblock.py --region Africa --gadm_name DJI  --simplify --from_dir ../data/buildings/Africa/DJI/
+python3 i_reblock.py --region Africa --gadm_name DJI  --gadm DJI.1.1_1 --simplify --from_dir ../data/buildings/Africa/DJI/
          
 ```
 
