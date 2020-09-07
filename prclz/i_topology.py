@@ -90,36 +90,25 @@ def cost_of_path(g,
 
     path_cost = 0
     path_cost_components = {}
+    path_length = len(path_seq)
 
-    i = 0
-    for p0, p1, p2 in zip(path_seq[0:-2], path_seq[1:-1], path_seq[2:]):
+    # PATH LENGTH 2
+    if path_length == 2:
+        p0, p1 = path_seq
         v0 = g.vs.select(name=p0)[0]
         v1 = g.vs.select(name=p1)[0]
-        v2 = g.vs.select(name=p2)[0]
-
-        path_cost = 0
-
+        
         if lambda_dist > 0:
             # Distance is Euclidean distance
-            distance = g.es.select(_between=([v1.index], [v2.index]))['eucl_dist'][0]
-            if i == 0:
-                distance += g.es.select(_between=([v0.index], [v1.index]))['eucl_dist'][0]
-
+            distance = g.es.select(_between=([v0.index], [v1.index]))['eucl_dist'][0]
+            
             # Operationalize width as way to mitigate distance
             if lambda_width > 0:
                 dist_cost = (lambda_dist * distance / (lambda_width * width))
-                path_cost += dist_cost
             else:
                 dist_cost = lambda_dist * distance
-                path_cost += dist_cost 
             path_cost_components['dist'] = dist_cost 
-
-        if lambda_turn_angle > 0:
-            # We penalize deviations from 180 (i.e. straight)
-            turn_angle = g.vs[v1.index]['angles'][(v0.index, v2.index)]
-            turn_angle = np.abs(turn_angle - 180)
-            path_cost += lambda_turn_angle * turn_angle
-            path_cost_components['turn_angle'] = lambda_turn_angle * turn_angle 
+            path_cost += dist_cost
 
         if lambda_degree > 0:
             pass
@@ -127,10 +116,48 @@ def cost_of_path(g,
         if lambda_width > 0:
             pass 
 
-        print("From {}->{}->{}".format(p0, p1, p2))
-        print("\tangle = {} | dist = {}".format(turn_angle, distance))
 
-        i += 1
+    # PATH LENGTH > 2
+    else:
+        i = 0
+        for p0, p1, p2 in zip(path_seq[0:-2], path_seq[1:-1], path_seq[2:]):
+            v0 = g.vs.select(name=p0)[0]
+            v1 = g.vs.select(name=p1)[0]
+            v2 = g.vs.select(name=p2)[0]
+
+            if lambda_dist > 0:
+                # Distance is Euclidean distance
+                distance = g.es.select(_between=([v1.index], [v2.index]))['eucl_dist'][0]
+                if i == 0:
+                    distance += g.es.select(_between=([v0.index], [v1.index]))['eucl_dist'][0]
+
+                # Operationalize width as way to mitigate distance
+                if lambda_width > 0:
+                    dist_cost = (lambda_dist * distance / (lambda_width * width))
+                    path_cost += dist_cost
+                else:
+                    dist_cost = lambda_dist * distance
+                    path_cost += dist_cost 
+                path_cost_components['dist'] = dist_cost 
+
+            if lambda_turn_angle > 0:
+                # We penalize deviations from 180 (i.e. straight)
+                turn_angle = g.vs[v1.index]['angles'][(v0.index, v2.index)]
+                turn_angle = np.abs(turn_angle - 180)
+                path_cost += lambda_turn_angle * turn_angle
+                path_cost_components['turn_angle'] = lambda_turn_angle * turn_angle 
+
+            if lambda_degree > 0:
+                pass
+
+            if lambda_width > 0:
+                pass 
+
+            #print("From {}->{}->{}".format(p0, p1, p2))
+            #print("\tangle = {} | dist = {}".format(turn_angle, distance))
+
+            i += 1
+    
     if return_compnents:
         return path_cost, path_cost_components
     else:
@@ -159,8 +186,11 @@ def shortest_path(g,
     cur_pt = origin_pt
     cur_v = g.vs.select(name=cur_pt)[0]
     while cur_pt != target_pt:
+        print("cur_pt = {}".format(cur_pt))
         for n in cur_v.neighbors():
+            print("\tneighbor = {}".format(n['name']))
             if n['visited']:
+                print("\t\talready visited -- continue")
                 continue
             else:
                 new_path = cur_v['_dji_path'][:] + [n['name']]
@@ -170,6 +200,8 @@ def shortest_path(g,
                                         lambda_degree=lambda_degree,
                                         lambda_width=lambda_width)
                 if new_dist < n['_dji_dist']:
+                    print("\t\tresetting path {} to {}".format(cur_v['_dji_path'][:], new_path))
+                    print("\t\tdist from {} to {}".format(n['_dji_dist'], new_dist))
                     n['_dji_dist'] = new_dist
                     n['_dji_path'] = new_path 
                     
@@ -222,7 +254,12 @@ def flex_steiner_tree(G,
     '''
 
     # (1) Build closed graph of terminal_vertices where each weight is the shortest path distance
-    H = build_weighted_complete_graph(G, terminal_vertices, lambda_turn_angle, lambda_dist)
+    H = build_weighted_complete_graph(G, 
+                                      terminal_vertices, 
+                                      lambda_turn_angle=lambda_turn_angle,
+                                      lambda_dist=lambda_dist,
+                                      lambda_degree=lambda_degree,
+                                      lambda_width=lambda_width)
 
     # (2) Now get the MST of that complete graph of only terminal_vertices
     if "weight" not in H.es.attributes():
@@ -235,42 +272,42 @@ def flex_steiner_tree(G,
 
     return steiner_edge_idxs
 
-# def shortest_path_orig(g, 
-#                   origin_pt, 
-#                   target_pt):
+def shortest_path_orig(g, 
+                  origin_pt, 
+                  target_pt):
     
-#     # Create bool attr for visited
-#     g.vs['visited'] = False
-#     #visited_indices = set()
+    # Create bool attr for visited
+    g.vs['visited'] = False
+    #visited_indices = set()
 
-#     # Create dist attr
-#     g.vs['_dji_dist'] = np.inf 
-#     g.vs['_dji_path'] = [[]*len(g.vs['_dji_dist'])]
-#     g.vs.select(name=origin_pt)['_dji_dist'] = 0
-#     g.vs.select(name=origin_pt)['_dji_path'] = [[origin_pt]]
+    # Create dist attr
+    g.vs['_dji_dist'] = np.inf 
+    g.vs['_dji_path'] = [[]*len(g.vs['_dji_dist'])]
+    g.vs.select(name=origin_pt)['_dji_dist'] = 0
+    g.vs.select(name=origin_pt)['_dji_path'] = [[origin_pt]]
 
-#     # Initialize current node
-#     cur_pt = origin_pt
-#     cur_v = g.vs.select(name=cur_pt)[0]
-#     while cur_pt != target_pt:
-#         #print("ON {}".format(cur_pt))
-#         for n in cur_v.neighbors():
-#             if n['visited']:
-#                 continue
-#             else:
-#                 new_dist = cur_v['_dji_dist'] + distance(cur_pt, n['name'])
-#                 if new_dist < n['_dji_dist']:
-#                     #print("\tupdating dist to {} = {}".format(n['name'], new_dist))
-#                     n['_dji_dist'] = new_dist
+    # Initialize current node
+    cur_pt = origin_pt
+    cur_v = g.vs.select(name=cur_pt)[0]
+    while cur_pt != target_pt:
+        #print("ON {}".format(cur_pt))
+        for n in cur_v.neighbors():
+            if n['visited']:
+                continue
+            else:
+                new_dist = cur_v['_dji_dist'] + distance(cur_pt, n['name'])
+                if new_dist < n['_dji_dist']:
+                    #print("\tupdating dist to {} = {}".format(n['name'], new_dist))
+                    n['_dji_dist'] = new_dist
 
-#                     # print(cur_v['_dji_path'])
-#                     n['_dji_path'] = cur_v['_dji_path'][:]
-#                     n['_dji_path'].append(n['name'])
+                    # print(cur_v['_dji_path'])
+                    n['_dji_path'] = cur_v['_dji_path'][:]
+                    n['_dji_path'].append(n['name'])
                     
-#         cur_v['visited'] = True
-#         argmin = np.argmin([x['_dji_dist'] for x in g.vs.select(visited=False)])
-#         cur_v = list(g.vs.select(visited=False))[argmin]
-#         cur_pt = cur_v['name']
+        cur_v['visited'] = True
+        argmin = np.argmin([x['_dji_dist'] for x in g.vs.select(visited=False)])
+        cur_v = list(g.vs.select(visited=False))[argmin]
+        cur_pt = cur_v['name']
 
 ###############################################################################
 ###############################################################################
@@ -761,7 +798,10 @@ class PlanarGraph(igraph.Graph):
         for i in steiner_edge_idxs:
             self.es[i]['steiner'] = True 
 
-    def plot_reblock(self, output_file, visual_style={}):
+    def plot_reblock(self, output_file, visual_style=None):
+
+        if visual_style is None:
+            visual_style = {}
         
         vtx_color_map = {True: 'red', False: 'blue'}
         edg_color_map = {True: 'red', False: 'blue'}
@@ -777,12 +817,17 @@ class PlanarGraph(igraph.Graph):
 
         if 'layout' not in visual_style.keys():
             visual_style['layout'] = [(x[0],-x[1]) for x in self.vs['name']]
+        else:
+            print("Layout is already in visual_style")
             
         if 'vertex_label' not in visual_style.keys():
             visual_style['vertex_label'] = [str(x) for x in self.vs['name']]
+        else:
+            print("vertex_label is already in visual_style")
 
         #return visual_style
 
+        #print("visual_style = {}".format(visual_style))
         igraph.plot(self, output_file, **visual_style)
 
 
@@ -918,7 +963,8 @@ class PlanarGraph(igraph.Graph):
     ################################################### 
     ## ADDITIONAL ATTRIBUTES FOR ADVANCED REBLOCKING ##
     def set_edge_width(self, 
-                       other_geoms: List[Polygon]) -> None:
+                       other_geoms: List[Polygon],
+                       simplify=True) -> None:
         '''
         Adds following properties:
             To edges:
@@ -927,7 +973,9 @@ class PlanarGraph(igraph.Graph):
         for e in self.es:
             e_line = LineString(self.edge_to_coords(e))
             distances = [e_line.distance(g) for g in other_geoms]
-            e['edge_width'] = min(distances)   
+            e['edge_width'] = min(distances) 
+        if simplify:
+            self.simplify_edge_width()  
 
     def set_node_angles(self, save_degree=True, format='degrees'):
         '''
@@ -1048,12 +1096,3 @@ def find_edge_from_coords(g, coord0, coord1):
             return None 
         else:
             return edge[0]
-# grid = i_topology.create_test_grid(2) 
-# points = [
-#     (0, 0.2),
-#     (1.8, 1),
-#     (0.8, 2),
-#     (2, 2),
-# ]
-# for pt in points:
-#     grid.add_node_to_closest_edge(pt, terminal=True)
