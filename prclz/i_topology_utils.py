@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import sys 
 
 import argparse
-from i_topology import PlanarGraph
+from .i_topology import PlanarGraph
 
 # DEFINE GLOBAL PATHS
 sys.path.insert(0, "../")
