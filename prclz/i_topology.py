@@ -17,6 +17,7 @@ import geopy.distance as gpy
 import pandas as pd 
 import geopandas as gpd
 from typing import List, Tuple
+#from path_cost import BasePathCost
 
 '''
 TO-DO:
@@ -34,142 +35,95 @@ from data_processing.setup_paths import *
 BUF_EPS = 1e-4
 BUF_RATE = 2
 
-def make_square(lower_left_pt, w=1):
-    pts = []
-    x,y = lower_left_pt
-    i,j = 0,0   
-    pts.append((x + w*i, y + w*j))
 
-    i,j = 1,0   
-    pts.append((x + w*i, y + w*j))
+# DEPRECATED
+# SUPERSEDED BY path_cost.py
+# def cost_of_path(g, 
+#                  path_seq,
+#                  lambda_dist=1.0,
+#                  lambda_turn_angle=0.0,
+#                  lambda_degree=0.0,
+#                  lambda_width=0.0,
+#                  return_compnents=False) -> float:
 
-    i,j = 1,1   
-    pts.append((x + w*i, y + w*j))
+#     path_cost = 0
+#     path_cost_components = {}
+#     path_length = len(path_seq)
 
-    i,j = 0,1   
-    pts.append((x + w*i, y + w*j))
-    pts.append(lower_left_pt)
-    return LineString(pts)
-
-def make_grid(lower_left_pt, h=3, w=3, delta=1):
-    multi = []
-    for i in range(w):
-        for j in range(h):
-            multi.append(make_square((i,j), delta))
-    return multi 
-
-def create_test_grid(n):
-    multi = []
-    for i in range(n):
-        for j in range(n):
-            multi.append(make_square((i,j), 1))
-    return PlanarGraph.multilinestring_to_planar_graph(multi)
-
-def create_connected_grid():
-    linestrings = []
-    linestrings.extend(make_grid((0,0), h=3,w=3,delta=1))
-    linestrings.extend(make_grid((6,0), h=3,w=3,delta=1))
-    connector = LineString([(3,0), (4,0), (5,0), (6,0)])
-    linestrings.append(connector)
-    g = PlanarGraph.multilinestring_to_planar_graph(linestrings)
-    g.es['width'] = 5
-    i = 1
-    for e in g.es[[24, 25, 26]]:
-        e['width'] = i
-        i += 1
-    return g 
-
-
-def cost_of_path(g, 
-                 path_seq,
-                 lambda_dist=1.0,
-                 lambda_turn_angle=0.0,
-                 lambda_degree=0.0,
-                 lambda_width=0.0,
-                 return_compnents=False) -> float:
-
-    path_cost = 0
-    path_cost_components = {}
-    path_length = len(path_seq)
-
-    # PATH LENGTH 2
-    if path_length == 2:
-        p0, p1 = path_seq
-        v0 = g.vs.select(name=p0)[0]
-        v1 = g.vs.select(name=p1)[0]
+#     # PATH LENGTH 2
+#     if path_length == 2:
+#         p0, p1 = path_seq
+#         v0 = g.vs.select(name=p0)[0]
+#         v1 = g.vs.select(name=p1)[0]
         
-        if lambda_dist > 0:
-            # Distance is Euclidean distance
-            distance = g.es.select(_between=([v0.index], [v1.index]))['eucl_dist'][0]
+#         if lambda_dist > 0:
+#             # Distance is Euclidean distance
+#             distance = g.es.select(_between=([v0.index], [v1.index]))['eucl_dist'][0]
             
-            # Operationalize width as way to mitigate distance
-            if lambda_width > 0:
-                dist_cost = (lambda_dist * distance / (lambda_width * width))
-            else:
-                dist_cost = lambda_dist * distance
-            path_cost_components['dist'] = dist_cost 
-            path_cost += dist_cost
+#             # Operationalize width as way to mitigate distance
+#             if lambda_width > 0:
+#                 dist_cost = (lambda_dist * distance / (lambda_width * width))
+#             else:
+#                 dist_cost = lambda_dist * distance
+#             path_cost_components['dist'] = dist_cost 
+#             path_cost += dist_cost
 
-        if lambda_degree > 0:
-            pass
+#         if lambda_degree > 0:
+#             pass
 
-        if lambda_width > 0:
-            pass 
+#         if lambda_width > 0:
+#             pass 
 
+#     # PATH LENGTH > 2
+#     else:
+#         i = 0
+#         for p0, p1, p2 in zip(path_seq[0:-2], path_seq[1:-1], path_seq[2:]):
+#             v0 = g.vs.select(name=p0)[0]
+#             v1 = g.vs.select(name=p1)[0]
+#             v2 = g.vs.select(name=p2)[0]
 
-    # PATH LENGTH > 2
-    else:
-        i = 0
-        for p0, p1, p2 in zip(path_seq[0:-2], path_seq[1:-1], path_seq[2:]):
-            v0 = g.vs.select(name=p0)[0]
-            v1 = g.vs.select(name=p1)[0]
-            v2 = g.vs.select(name=p2)[0]
+#             if lambda_dist > 0:
+#                 # Distance is Euclidean distance
+#                 distance = g.es.select(_between=([v1.index], [v2.index]))['eucl_dist'][0]
+#                 if i == 0:
+#                     distance += g.es.select(_between=([v0.index], [v1.index]))['eucl_dist'][0]
 
-            if lambda_dist > 0:
-                # Distance is Euclidean distance
-                distance = g.es.select(_between=([v1.index], [v2.index]))['eucl_dist'][0]
-                if i == 0:
-                    distance += g.es.select(_between=([v0.index], [v1.index]))['eucl_dist'][0]
+#                 # Operationalize width as way to mitigate distance
+#                 if lambda_width > 0:
+#                     dist_cost = (lambda_dist * distance / (lambda_width * width))
+#                     path_cost += dist_cost
+#                 else:
+#                     dist_cost = lambda_dist * distance
+#                     path_cost += dist_cost 
+#                 path_cost_components['dist'] = dist_cost 
 
-                # Operationalize width as way to mitigate distance
-                if lambda_width > 0:
-                    dist_cost = (lambda_dist * distance / (lambda_width * width))
-                    path_cost += dist_cost
-                else:
-                    dist_cost = lambda_dist * distance
-                    path_cost += dist_cost 
-                path_cost_components['dist'] = dist_cost 
+#             if lambda_turn_angle > 0:
+#                 # We penalize deviations from 180 (i.e. straight)
+#                 turn_angle = g.vs[v1.index]['angles'][(v0.index, v2.index)]
+#                 turn_angle = np.abs(turn_angle - 180)
+#                 path_cost += lambda_turn_angle * turn_angle
+#                 path_cost_components['turn_angle'] = lambda_turn_angle * turn_angle 
 
-            if lambda_turn_angle > 0:
-                # We penalize deviations from 180 (i.e. straight)
-                turn_angle = g.vs[v1.index]['angles'][(v0.index, v2.index)]
-                turn_angle = np.abs(turn_angle - 180)
-                path_cost += lambda_turn_angle * turn_angle
-                path_cost_components['turn_angle'] = lambda_turn_angle * turn_angle 
+#             if lambda_degree > 0:
+#                 pass
 
-            if lambda_degree > 0:
-                pass
+#             if lambda_width > 0:
+#                 pass 
 
-            if lambda_width > 0:
-                pass 
+#             #print("From {}->{}->{}".format(p0, p1, p2))
+#             #print("\tangle = {} | dist = {}".format(turn_angle, distance))
 
-            #print("From {}->{}->{}".format(p0, p1, p2))
-            #print("\tangle = {} | dist = {}".format(turn_angle, distance))
-
-            i += 1
+#             i += 1
     
-    if return_compnents:
-        return path_cost, path_cost_components
-    else:
-        return path_cost 
+#     if return_compnents:
+#         return path_cost, path_cost_components
+#     else:
+#         return path_cost 
 
 def shortest_path(g, 
                   origin_pt: Tuple[float, float], 
                   target_pt: Tuple[float, float], 
-                  lambda_dist=1.0,
-                  lambda_turn_angle=0.0,
-                  lambda_degree=0.0,
-                  lambda_width=0.0,
+                  cost_fn,
                   return_epath = True,
                   return_dist = True):
     
@@ -186,22 +140,18 @@ def shortest_path(g,
     cur_pt = origin_pt
     cur_v = g.vs.select(name=cur_pt)[0]
     while cur_pt != target_pt:
-        print("cur_pt = {}".format(cur_pt))
+        #print("cur_pt = {}".format(cur_pt))
         for n in cur_v.neighbors():
-            print("\tneighbor = {}".format(n['name']))
+            #print("\tneighbor = {}".format(n['name']))
             if n['visited']:
-                print("\t\talready visited -- continue")
+                #print("\t\talready visited -- continue")
                 continue
             else:
                 new_path = cur_v['_dji_path'][:] + [n['name']]
-                new_dist = cost_of_path(g, new_path, 
-                                        lambda_turn_angle=lambda_turn_angle,
-                                        lambda_dist=lambda_dist,
-                                        lambda_degree=lambda_degree,
-                                        lambda_width=lambda_width)
+                new_dist = cost_fn(g, new_path)
                 if new_dist < n['_dji_dist']:
-                    print("\t\tresetting path {} to {}".format(cur_v['_dji_path'][:], new_path))
-                    print("\t\tdist from {} to {}".format(n['_dji_dist'], new_dist))
+                    #print("\t\tresetting path {} to {}".format(cur_v['_dji_path'][:], new_path))
+                    #print("\t\tdist from {} to {}".format(n['_dji_dist'], new_dist))
                     n['_dji_dist'] = new_dist
                     n['_dji_path'] = new_path 
                     
@@ -222,33 +172,24 @@ def shortest_path(g,
         rv.append(vpath_dist)
     return rv 
 
-def build_weighted_complete_graph(G, 
-                                  terminal_vertices,
-                                  lambda_dist=1.0,
-                                  lambda_turn_angle=0.0,
-                                  lambda_degree=0.0,
-                                  lambda_width=0.0):
+def build_weighted_complete_graph(G: igraph.Graph, 
+                                  terminal_vertices: igraph.EdgeSeq,
+                                  cost_fn):
     H = PlanarGraph()
     for u,v in combinations(terminal_vertices, 2):
         if not isinstance(u, tuple):
             u = u['name']
             v = v['name']
-        path_idxs, path_distance = shortest_path(g=G, origin_pt=u, target_pt=v,
-                                                 lambda_turn_angle=lambda_turn_angle,
-                                                 lambda_dist=lambda_dist,
-                                                 lambda_degree=lambda_degree,
-                                                 lambda_width=lambda_width)
+        path_idxs, path_distance = shortest_path(g=G, origin_pt=u, 
+                                                 target_pt=v, cost_fn=cost_fn)
         path_edges = G.es[path_idxs]
         kwargs = {'weight':path_distance, 'path':path_idxs}
         H.add_edge(u, v, **kwargs)
     return H 
 
-def flex_steiner_tree(G, 
-                      terminal_vertices,
-                      lambda_dist=1.0,
-                      lambda_turn_angle=0.0,
-                      lambda_degree=0.0,
-                      lambda_width=0.0):
+def flex_steiner_tree(G: igraph.Graph, 
+                      terminal_vertices: igraph.EdgeSeq,
+                      cost_fn):
     '''
     terminal_nodes is List of igraph.Vertex
     '''
@@ -256,10 +197,7 @@ def flex_steiner_tree(G,
     # (1) Build closed graph of terminal_vertices where each weight is the shortest path distance
     H = build_weighted_complete_graph(G, 
                                       terminal_vertices, 
-                                      lambda_turn_angle=lambda_turn_angle,
-                                      lambda_dist=lambda_dist,
-                                      lambda_degree=lambda_degree,
-                                      lambda_width=lambda_width)
+                                      cost_fn=cost_fn)
 
     # (2) Now get the MST of that complete graph of only terminal_vertices
     if "weight" not in H.es.attributes():
@@ -461,7 +399,6 @@ def vector_projection(edge_tuple, coords):
 
 class PlanarGraph(igraph.Graph):
     def __init__(self):
-        print("test")
         super().__init__()
 
     @staticmethod
@@ -777,11 +714,7 @@ class PlanarGraph(igraph.Graph):
             self.es[i]['steiner'] = True 
 
     def flex_steiner_tree_approx(self, 
-                                 lambda_dist=1.0,
-                                 lambda_turn_angle=0.0,
-                                 lambda_degree=0.0,
-                                 lambda_width=0.0,
-                                 verbose=False):
+                                 cost_fn):
         '''
         All Nodes within the graph have an attribute, Node.terminal, which is a boolean
         denoting whether they should be included in the set of terminal_nodes which
@@ -791,10 +724,7 @@ class PlanarGraph(igraph.Graph):
 
         steiner_edge_idxs = flex_steiner_tree(self, 
                                               terminal_nodes, 
-                                              lambda_dist=lambda_dist,
-                                              lambda_turn_angle=lambda_turn_angle,
-                                              lambda_degree=lambda_degree,
-                                              lambda_width=lambda_width)
+                                              cost_fn = cost_fn)
         for i in steiner_edge_idxs:
             self.es[i]['steiner'] = True 
 
@@ -973,7 +903,7 @@ class PlanarGraph(igraph.Graph):
         for e in self.es:
             e_line = LineString(self.edge_to_coords(e))
             distances = [e_line.distance(g) for g in other_geoms]
-            e['edge_width'] = min(distances) 
+            e['width'] = min(distances) 
         if simplify:
             self.simplify_edge_width()  
 
@@ -1010,76 +940,6 @@ def convert_to_lines(planar_graph) -> MultiLineString:
     multi_line = unary_union(lines)
     return multi_line 
 
-def plot_edge_type(g, output_file):
-
-    edge_color_map = {None: 'red', 'waterway': 'blue', 
-                      'highway': 'black', 'natural': 'green', 'gadm_boundary': 'orange'}
-    visual_style = {}       
-    SMALL = 0       
-    visual_style['vertex_size'] = [SMALL for _ in g.vs]
-
-    if 'edge_type' not in g.es.attributes():
-        g.es['edge_type'] = None 
-    visual_style['edge_color'] = [edge_color_map[t] for t in g.es['edge_type'] ]
-    visual_style['layout'] = [(x[0],-x[1]) for x in g.vs['name']]
-
-    return igraph.plot(g, output_file, **visual_style)
-
-
-def plot_reblock(g, output_file):
-    vtx_color_map = {True: 'red', False: 'blue'}
-    edg_color_map = {True: 'red', False: 'blue'}
-    
-    visual_style = {}
-    if 'vertex_color' not in visual_style.keys():
-        visual_style['vertex_color'] = [vtx_color_map[t] for t in g.vs['terminal'] ]
-    
-    BIG = 20
-    SMALL = 20
-    if 'bbox' not in visual_style.keys():
-        visual_style['bbox'] = (900,900)
-    if 'vertex_size' not in visual_style.keys():
-        visual_style['vertex_size'] = [BIG if v['terminal'] else SMALL for v in g.vs]
-
-    if 'edge_color' not in visual_style.keys():
-        visual_style['edge_color'] = [edg_color_map[t] for t in g.es['steiner'] ]
-        
-    if 'layout' not in visual_style.keys():
-        visual_style['layout'] = [(x[0],-x[1]) for x in g.vs['name']]
-        
-    # if 'vertex_label' not in visual_style.keys():
-    #     visual_style['vertex_label'] = [str(x) for x in g.vs['name']]
-
-    return igraph.plot(g, output_file, **visual_style)
-
-def write_reblock_svg(g, output_file):
-    vtx_color_map = {True: 'red', False: 'blue'}
-    edg_color_map = {True: 'red', False: 'blue'}
-    
-    visual_style = {}
-    if 'colors' not in visual_style.keys():
-        visual_style['colors'] = [vtx_color_map[t] for t in g.vs['terminal'] ]
-    
-    BIG = 5
-    SMALL = 1
-
-    visual_style['width'] = 600
-    visual_style['height'] = 600
-
-    if 'vertex_size' not in visual_style.keys():
-        visual_style['vertex_size'] = [BIG if v['terminal'] else SMALL for v in g.vs]
-
-    if 'edge_colors' not in visual_style.keys():
-        visual_style['edge_colors'] = [edg_color_map[t] for t in g.es['steiner'] ]
-        
-    if 'layout' not in visual_style.keys():
-        visual_style['layout'] = [(x[0],-x[1]) for x in g.vs['name']]
-        
-    # if 'vertex_label' not in visual_style.keys():
-    #     visual_style['vertex_label'] = [str(x) for x in g.vs['name']]
-
-    g.write_svg(output_file, **visual_style)
-
 
 def find_edge_from_coords(g, coord0, coord1):
     '''
@@ -1096,3 +956,79 @@ def find_edge_from_coords(g, coord0, coord1):
             return None 
         else:
             return edge[0]
+
+########################################################################
+# BELOW THIS, CODE IS BEING COMMENTED OUT TO LATER BE DELETED ##########
+########################################################################
+
+
+#def plot_edge_type(g, output_file):
+
+#     edge_color_map = {None: 'red', 'waterway': 'blue', 
+#                       'highway': 'black', 'natural': 'green', 'gadm_boundary': 'orange'}
+#     visual_style = {}       
+#     SMALL = 0       
+#     visual_style['vertex_size'] = [SMALL for _ in g.vs]
+
+#     if 'edge_type' not in g.es.attributes():
+#         g.es['edge_type'] = None 
+#     visual_style['edge_color'] = [edge_color_map[t] for t in g.es['edge_type'] ]
+#     visual_style['layout'] = [(x[0],-x[1]) for x in g.vs['name']]
+
+#     return igraph.plot(g, output_file, **visual_style)
+
+
+# def plot_reblock(g, output_file):
+#     vtx_color_map = {True: 'red', False: 'blue'}
+#     edg_color_map = {True: 'red', False: 'blue'}
+    
+#     visual_style = {}
+#     if 'vertex_color' not in visual_style.keys():
+#         visual_style['vertex_color'] = [vtx_color_map[t] for t in g.vs['terminal'] ]
+    
+#     BIG = 20
+#     SMALL = 20
+#     if 'bbox' not in visual_style.keys():
+#         visual_style['bbox'] = (900,900)
+#     if 'vertex_size' not in visual_style.keys():
+#         visual_style['vertex_size'] = [BIG if v['terminal'] else SMALL for v in g.vs]
+
+#     if 'edge_color' not in visual_style.keys():
+#         visual_style['edge_color'] = [edg_color_map[t] for t in g.es['steiner'] ]
+        
+#     if 'layout' not in visual_style.keys():
+#         visual_style['layout'] = [(x[0],-x[1]) for x in g.vs['name']]
+        
+#     # if 'vertex_label' not in visual_style.keys():
+#     #     visual_style['vertex_label'] = [str(x) for x in g.vs['name']]
+
+#     return igraph.plot(g, output_file, **visual_style)
+
+# def write_reblock_svg(g, output_file):
+#     vtx_color_map = {True: 'red', False: 'blue'}
+#     edg_color_map = {True: 'red', False: 'blue'}
+    
+#     visual_style = {}
+#     if 'colors' not in visual_style.keys():
+#         visual_style['colors'] = [vtx_color_map[t] for t in g.vs['terminal'] ]
+    
+#     BIG = 5
+#     SMALL = 1
+
+#     visual_style['width'] = 600
+#     visual_style['height'] = 600
+
+#     if 'vertex_size' not in visual_style.keys():
+#         visual_style['vertex_size'] = [BIG if v['terminal'] else SMALL for v in g.vs]
+
+#     if 'edge_colors' not in visual_style.keys():
+#         visual_style['edge_colors'] = [edg_color_map[t] for t in g.es['steiner'] ]
+        
+#     if 'layout' not in visual_style.keys():
+#         visual_style['layout'] = [(x[0],-x[1]) for x in g.vs['name']]
+        
+#     # if 'vertex_label' not in visual_style.keys():
+#     #     visual_style['vertex_label'] = [str(x) for x in g.vs['name']]
+
+#     g.write_svg(output_file, **visual_style)
+
