@@ -180,8 +180,10 @@ def build_weighted_complete_graph(G: igraph.Graph,
         if not isinstance(u, tuple):
             u = u['name']
             v = v['name']
+        print("in build_weighted_complete_graph: {},{}".format(u, v))
         path_idxs, path_distance = shortest_path(g=G, origin_pt=u, 
                                                  target_pt=v, cost_fn=cost_fn)
+        print("...done")
         path_edges = G.es[path_idxs]
         kwargs = {'weight':path_distance, 'path':path_idxs}
         H.add_edge(u, v, **kwargs)
@@ -261,7 +263,10 @@ def angle_btwn(pt0, pt1, pt2, degrees=False) -> float:
     unit_vec0 = pt0 / np.linalg.norm(pt0)
     unit_vec2 = pt2 / np.linalg.norm(pt2)
     dot = np.dot(unit_vec0, unit_vec2)
+    dot = np.clip(dot, -1, 1)
     angle = np.arccos(dot)
+    if np.isnan(angle):
+        print("dot = {}".format(dot))
     if degrees:
         angle = np.degrees(angle)
     return angle
@@ -883,10 +888,11 @@ class PlanarGraph(igraph.Graph):
             if num_neighbors == 2:
                 # get the two edges
                 cont_vs = self.search_continuous_edge(v)
-                print("Vertex {} has {} neighbors".format(v.index, num_neighbors))
-                print("\tsegment is {}".format(cont_vs))
                 edges = self.es.select(_within=cont_vs)
                 min_width = min([e['width'] for e in edges])
+                if min_width is None:
+                    print("Vertex {} has {} neighbors".format(v.index, num_neighbors))
+                    print("\tsegment is {}".format(cont_vs))
                 for e in edges:
                     e['width'] = min_width
 
