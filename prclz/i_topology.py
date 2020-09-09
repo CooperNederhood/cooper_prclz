@@ -17,15 +17,19 @@ import geopy.distance as gpy
 import pandas as pd 
 import geopandas as gpd
 from typing import List, Tuple
+from heapdict import heapdict
+from fib_heap import Fibonacci_heap
+import tqdm 
 #from path_cost import BasePathCost
 
 '''
 TO-DO:
-- We have a hand-written Djisktra and a toy grid
-   with terminal points
-- So, write a new Steiner algorithm that uses that
-- Then perform various reblocking preferences on that
-- Add buildings to the toy grid to test width
+- The backwards pass of the Dij. is too slow 
+  and needs to be optimized. Probably we can directly
+  record the edge index when recording the path
+- In making the Dij. fast it now only does basic distance
+  so add back that flexibility
+- Then test on DJI data
 '''
 
 # DEFINE GLOBAL PATHS
@@ -36,134 +40,89 @@ BUF_EPS = 1e-4
 BUF_RATE = 2
 
 
-# DEPRECATED
-# SUPERSEDED BY path_cost.py
-# def cost_of_path(g, 
-#                  path_seq,
-#                  lambda_dist=1.0,
-#                  lambda_turn_angle=0.0,
-#                  lambda_degree=0.0,
-#                  lambda_width=0.0,
-#                  return_compnents=False) -> float:
-
-#     path_cost = 0
-#     path_cost_components = {}
-#     path_length = len(path_seq)
-
-#     # PATH LENGTH 2
-#     if path_length == 2:
-#         p0, p1 = path_seq
-#         v0 = g.vs.select(name=p0)[0]
-#         v1 = g.vs.select(name=p1)[0]
-        
-#         if lambda_dist > 0:
-#             # Distance is Euclidean distance
-#             distance = g.es.select(_between=([v0.index], [v1.index]))['eucl_dist'][0]
-            
-#             # Operationalize width as way to mitigate distance
-#             if lambda_width > 0:
-#                 dist_cost = (lambda_dist * distance / (lambda_width * width))
-#             else:
-#                 dist_cost = lambda_dist * distance
-#             path_cost_components['dist'] = dist_cost 
-#             path_cost += dist_cost
-
-#         if lambda_degree > 0:
-#             pass
-
-#         if lambda_width > 0:
-#             pass 
-
-#     # PATH LENGTH > 2
-#     else:
-#         i = 0
-#         for p0, p1, p2 in zip(path_seq[0:-2], path_seq[1:-1], path_seq[2:]):
-#             v0 = g.vs.select(name=p0)[0]
-#             v1 = g.vs.select(name=p1)[0]
-#             v2 = g.vs.select(name=p2)[0]
-
-#             if lambda_dist > 0:
-#                 # Distance is Euclidean distance
-#                 distance = g.es.select(_between=([v1.index], [v2.index]))['eucl_dist'][0]
-#                 if i == 0:
-#                     distance += g.es.select(_between=([v0.index], [v1.index]))['eucl_dist'][0]
-
-#                 # Operationalize width as way to mitigate distance
-#                 if lambda_width > 0:
-#                     dist_cost = (lambda_dist * distance / (lambda_width * width))
-#                     path_cost += dist_cost
-#                 else:
-#                     dist_cost = lambda_dist * distance
-#                     path_cost += dist_cost 
-#                 path_cost_components['dist'] = dist_cost 
-
-#             if lambda_turn_angle > 0:
-#                 # We penalize deviations from 180 (i.e. straight)
-#                 turn_angle = g.vs[v1.index]['angles'][(v0.index, v2.index)]
-#                 turn_angle = np.abs(turn_angle - 180)
-#                 path_cost += lambda_turn_angle * turn_angle
-#                 path_cost_components['turn_angle'] = lambda_turn_angle * turn_angle 
-
-#             if lambda_degree > 0:
-#                 pass
-
-#             if lambda_width > 0:
-#                 pass 
-
-#             #print("From {}->{}->{}".format(p0, p1, p2))
-#             #print("\tangle = {} | dist = {}".format(turn_angle, distance))
-
-#             i += 1
-    
-#     if return_compnents:
-#         return path_cost, path_cost_components
-#     else:
-#         return path_cost 
-
 def shortest_path(g, 
                   origin_pt: Tuple[float, float], 
                   target_pt: Tuple[float, float], 
                   cost_fn,
                   return_epath = True,
                   return_dist = True):
-    
-    # Create bool attr for visited
-    g.vs['visited'] = False
 
-    # Create dist attr
-    g.vs['_dji_dist'] = np.inf 
-    g.vs['_dji_path'] = [[]*len(g.vs['_dji_dist'])]
-    g.vs.select(name=origin_pt)['_dji_dist'] = 0
-    g.vs.select(name=origin_pt)['_dji_path'] = [[origin_pt]]
+    #print("TEST INSIDE")
+    
+    # Build priority queue
+    Q = heapdict()
+    #Q = Fibonacci_heap()
+    for v in g.vs:
+        if v['name'] == origin_pt:
+            d = 0
+            path = None
+        else:
+            d = np.inf
+            path = None
+        v['_dji_dist'] = d 
+        v['_dji_path'] = path 
+        v['_visited'] = False
+        if v['name'] == origin_pt:
+            Q[v] = v['_dji_dist']
+            #v['_ref'] = Q.enqueue(v, v['_dji_dist'])
+        
 
     # Initialize current node
-    cur_pt = origin_pt
-    cur_v = g.vs.select(name=cur_pt)[0]
+    cur_v, _ = Q.popitem()
+    #cur_v = Q.dequeue_min().get_value()
+    cur_pt = cur_v['name']
     while cur_pt != target_pt:
         #print("cur_pt = {}".format(cur_pt))
         for n in cur_v.neighbors():
             #print("\tneighbor = {}".format(n['name']))
-            if n['visited']:
+            if n['_visited']:
                 #print("\t\talready visited -- continue")
                 continue
             else:
-                new_path = cur_v['_dji_path'][:] + [n['name']]
-                new_dist = cost_fn(g, new_path)
+                #new_path = cur_v['_dji_path'][:] + [n['name']]
+                #marg_path = cur_v['_dji_path'][-1:] + [n['name']]
+                # if len(cur_v['_dji_path']) > 1:
+                #     marg_path.insert(0, cur_v['_dji_path'][-2])
+                # #new_dist = cost_fn(g, new_path)
+                #marg_dist = cost_fn(g, marg_path)
+                marg_dist = distance(cur_pt, n['name'])
+                new_dist = marg_dist + cur_v['_dji_dist']
                 if new_dist < n['_dji_dist']:
-                    #print("\t\tresetting path {} to {}".format(cur_v['_dji_path'][:], new_path))
-                    #print("\t\tdist from {} to {}".format(n['_dji_dist'], new_dist))
+                    # print("\t\tresetting path {} to {}".format(cur_v['_dji_path'], cur_v.index))
+                    # print("\t\tdist from {} to {}".format(n['_dji_dist'], new_dist))
                     n['_dji_dist'] = new_dist
-                    n['_dji_path'] = new_path 
+                    n['_dji_path'] = cur_v.index
+
+                    # Update the priority in Q
+                    Q[n] = new_dist 
+                    # if n['_ref'] is not None:
+                    #     #print("Decreasing {} to {}".format(n['_ref'], new_dist))
+                    #     Q.decrease_key(n['_ref'], new_dist)
+                    # else:
+                    #     #print("Adding to queue")
+                    #     n['_ref'] = Q.enqueue(n, n['_dji_dist'])
                     
-        cur_v['visited'] = True
-        argmin = np.argmin([x['_dji_dist'] for x in g.vs.select(visited=False)])
-        cur_v = list(g.vs.select(visited=False))[argmin]
+        cur_v['_visited'] = True
+        cur_v, _ = Q.popitem()
+        #cur_v = Q.dequeue_min().get_value()
         cur_pt = cur_v['name']
+
+    #print("Found {} at {}: go back to idx {}".format(target_pt, cur_pt, cur_v['_dji_path']))
 
     # Clean up returned output
     rv = []
     if return_epath:
-        vpath_names = g.vs.select(name=target_pt)['_dji_path'][0]
+        vpath_names = []
+        while cur_pt != origin_pt:
+            vpath_names.append(cur_pt)
+            prev_idx = cur_v['_dji_path']
+            #print("back tracking to {}".format(prev_idx))
+            if prev_idx is None:
+                print("origin_pt = {} | target_pt = {}".format(origin_pt, target_pt))
+                print("path is: {}".format(vpath_names))
+            cur_v = g.vs[prev_idx]
+            cur_pt = cur_v['name']
+        #vpath_names = g.vs.select(name=target_pt)['_dji_path'][0]
         epath_edges = g.coord_path_to_edge_path(vpath_names)
         epath_indices = [e.index for e in epath_edges]
         rv.append(epath_indices)
@@ -172,18 +131,77 @@ def shortest_path(g,
         rv.append(vpath_dist)
     return rv 
 
+# def shortest_path(g, 
+#                   origin_pt: Tuple[float, float], 
+#                   target_pt: Tuple[float, float], 
+#                   cost_fn,
+#                   return_epath = True,
+#                   return_dist = True):
+    
+#     # Create bool attr for visited
+#     g.vs['visited'] = False
+
+#     # Create dist attr
+#     g.vs['_dji_dist'] = np.inf 
+#     g.vs['_dji_path'] = [[]*len(g.vs['_dji_dist'])]
+#     g.vs.select(name=origin_pt)['_dji_dist'] = 0
+#     g.vs.select(name=origin_pt)['_dji_path'] = [[origin_pt]]
+
+#     # Initialize current node
+#     cur_pt = origin_pt
+#     cur_v = g.vs.select(name=cur_pt)[0]
+#     while cur_pt != target_pt:
+#         #print("cur_pt = {}".format(cur_pt))
+#         for n in cur_v.neighbors():
+#             #print("\tneighbor = {}".format(n['name']))
+#             if n['visited']:
+#                 #print("\t\talready visited -- continue")
+#                 continue
+#             else:
+#                 new_path = cur_v['_dji_path'][:] + [n['name']]
+#                 marg_path = cur_v['_dji_path'][-1:] + [n['name']]
+#                 if len(cur_v['_dji_path']) > 1:
+#                     marg_path.insert(0, cur_v['_dji_path'][-2])
+#                 #new_dist = cost_fn(g, new_path)
+#                 marg_dist = cost_fn(g, marg_path)
+#                 new_dist = marg_dist + cur_v['_dji_dist']
+#                 if new_dist < n['_dji_dist']:
+#                     #print("\t\tresetting path {} to {}".format(cur_v['_dji_path'][:], new_path))
+#                     #print("\t\tdist from {} to {}".format(n['_dji_dist'], new_dist))
+#                     n['_dji_dist'] = new_dist
+#                     n['_dji_path'] = new_path 
+                    
+#         cur_v['visited'] = True
+#         argmin = np.argmin([x['_dji_dist'] for x in g.vs.select(visited=False)])
+#         cur_v = list(g.vs.select(visited=False))[argmin]
+#         cur_pt = cur_v['name']
+
+#     # Clean up returned output
+#     rv = []
+#     if return_epath:
+#         vpath_names = g.vs.select(name=target_pt)['_dji_path'][0]
+#         epath_edges = g.coord_path_to_edge_path(vpath_names)
+#         epath_indices = [e.index for e in epath_edges]
+#         rv.append(epath_indices)
+#     if return_dist:
+#         vpath_dist = g.vs.select(name=target_pt)['_dji_dist'][0]
+#         rv.append(vpath_dist)
+#     return rv 
+
 def build_weighted_complete_graph(G: igraph.Graph, 
                                   terminal_vertices: igraph.EdgeSeq,
                                   cost_fn):
     H = PlanarGraph()
-    for u,v in combinations(terminal_vertices, 2):
+    combs_list = list(combinations(terminal_vertices, 2))
+    for u,v in tqdm.tqdm(combs_list, total=len(combs_list)):
+    #for u,v in combs_list:
         if not isinstance(u, tuple):
             u = u['name']
             v = v['name']
-        print("in build_weighted_complete_graph: {},{}".format(u, v))
+        #print("in build_weighted_complete_graph: {},{}".format(u, v))
         path_idxs, path_distance = shortest_path(g=G, origin_pt=u, 
                                                  target_pt=v, cost_fn=cost_fn)
-        print("...done")
+        #print("...done")
         path_edges = G.es[path_idxs]
         kwargs = {'weight':path_distance, 'path':path_idxs}
         H.add_edge(u, v, **kwargs)

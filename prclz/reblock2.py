@@ -88,7 +88,7 @@ def reblock_gadm(region, gadm_code, gadm, simplify, cost_fn, block_list=None):
         planar_graph.flex_steiner_tree_approx(cost_fn = cost_fn)
 
 
-#cost_fn = reblock2.FlexCost(lambda_width=1.0,lambda_degree=200., lambda_turn_angle=2.)
+# #cost_fn = reblock2.FlexCost(lambda_width=1.0,lambda_degree=200., lambda_turn_angle=2.)
 # cost_fn = reblock2.FlexCost()
 # parcels, buildings, blocks = reblock2.load_reblock_inputs(region, gadm_code, gadm)
 # planar_graph = PlanarGraph.multilinestring_to_planar_graph(parcel_geom)

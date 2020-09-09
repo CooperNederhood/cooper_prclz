@@ -32,6 +32,12 @@ class BasePathCost(ABC):
 
 class FlexCost(BasePathCost):
 
+    '''
+    NOTE: this needs to be fixed to not double
+    count, now that we are calculating the marginal
+    cost of the path, rather than the full path cost
+    '''
+
     def __call__(self, 
                  g: i_topology.PlanarGraph, 
                  path_seq: igraph.EdgeSeq,
