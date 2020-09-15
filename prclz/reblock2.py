@@ -2,10 +2,12 @@ import os
 import geopandas as gpd 
 import pandas as pd 
 from pathlib import Path 
+from typing import Callable
 
 from i_topology import PlanarGraph
 from i_topology_utils import csv_to_geo
 from i_reblock import add_buildings, clean_graph
+from i_reblock import add_outside_node, drop_buildings_intersecting_block
 from path_cost import FlexCost
 
 
@@ -53,42 +55,77 @@ def load_reblock_inputs(region: str, gadm_code: str, gadm: str):
     return parcels_df, buildings_df, blocks_df 
 
 
-def reblock_gadm(region, gadm_code, gadm, simplify, cost_fn, block_list=None):
+def reblock_gadm(region, gadm_code, gadm, cost_fn, block_list=None):
 
     parcels, buildings, blocks = load_reblock_inputs(region, gadm_code, gadm)
 
     if block_list is None:
         block_list = blocks['block_id'].values
 
+    reblock_data = {'geometry': [], 'line_type': []}
+
     for block_id in block_list:
+        print("Reblocking {}".format(block_id))
+        reblock_data, planar_graph = reblock_block_id(parcels, buildings, blocks, 
+                                        block_id, cost_fn, reblock_data)
+    
+    reblock_data = gpd.GeoDataFrame.from_dict(reblock_data)
+    return reblock_data, parcels, buildings, blocks
 
-        # (0) Get data for the block
-        parcel_geom = parcels[parcels['block_id']==block_id]['geometry'].iloc[0]
-        building_list = buildings[buildings['block_id']==block_id]['buildings'].iloc[0]
-        block_geom = blocks[blocks['block_id']==block_id]['geometry'].iloc[0]
+def reblock_block_id(parcels: gpd.GeoDataFrame, 
+                     buildings: pd.DataFrame,
+                     blocks: gpd.GeoDataFrame,
+                     block_id: str,
+                     cost_fn: Callable,
+                     reblock_data = None):
 
-        # (1) Convert parcel geometry to planar graph
-        planar_graph = PlanarGraph.multilinestring_to_planar_graph(parcel_geom)
+    if reblock_data is None:
+        reblock_data = {'geometry': [], 'line_type': []}
 
-        # (2) Add building centroids to the planar graph
-        bldg_tuples = [list(b.coords)[0] for b in building_list]
-        planar_graph = add_buildings(planar_graph, bldg_tuples)
+    # (0) Get data for the block
+    parcel_geom = parcels[parcels['block_id']==block_id]['geometry'].iloc[0]
+    building_list = buildings[buildings['block_id']==block_id]['buildings'].iloc[0]
+    block_geom = blocks[blocks['block_id']==block_id]['geometry'].iloc[0]
 
-        # (3) Clean the graph if its disconnected
-        planar_graph, num_components = clean_graph(planar_graph)
+    # (1) drop buildings that intersect with the block border -- they have access
+    if len(building_list) <= 1:
+        return None 
+    building_list = drop_buildings_intersecting_block(parcel_geom, building_list, block_geom, block_id)
+    if len(building_list) <= 1:
+        return None 
 
-        # (4) Update the planar graph if the cost_fn needs it
-        if cost_fn.lambda_turn_angle > 0:
-            planar_graph.set_node_angles()
-        if cost_fn.lambda_width > 0:
-            bldg_polys = buildings[buildings['block_id']==block_id]['geometry'].iloc[0]
-            planar_graph.set_edge_width(bldg_polys)
+    # (2) And explicitly add a dummy building outside of the block which will force Steiner Alg
+    #      to connect to the outside road network
+    building_list = add_outside_node(block_geom, building_list)
 
-        # (5) Do steiner approximation
-        planar_graph.flex_steiner_tree_approx(cost_fn = cost_fn)
+    # (3) Convert parcel geometry to planar graph
+    planar_graph = PlanarGraph.multilinestring_to_planar_graph(parcel_geom)
+
+    # (4) Add building centroids to the planar graph
+    #bldg_tuples = [list(b.coords)[0] for b in building_list]
+    #planar_graph = add_buildings(planar_graph, bldg_tuples)
+    planar_graph = add_buildings(planar_graph, building_list)
+
+    # (5) Clean the graph if its disconnected
+    planar_graph, num_components = clean_graph(planar_graph)
+
+    # (6) Update the planar graph if the cost_fn needs it
+    if cost_fn.lambda_turn_angle > 0:
+        planar_graph.set_node_angles()
+    if cost_fn.lambda_width > 0:
+        bldg_polys = buildings[buildings['block_id']==block_id]['geometry'].iloc[0]
+        planar_graph.set_edge_width(bldg_polys)
+
+    # (7) Do steiner approximation
+    planar_graph.flex_steiner_tree_approx(cost_fn = cost_fn)
+    new_steiner, existing_steiner = planar_graph.get_steiner_linestrings(expand=False)
+    reblock_data['geometry'] += [new_steiner, existing_steiner]
+    reblock_data['line_type'] += ['new', 'existing']
+
+    return reblock_data, planar_graph 
 
 
-# #cost_fn = reblock2.FlexCost(lambda_width=1.0,lambda_degree=200., lambda_turn_angle=2.)
+# # #cost_fn = reblock2.FlexCost(lambda_width=1.0,lambda_degree=200., lambda_turn_angle=2.)
 # cost_fn = reblock2.FlexCost()
 # parcels, buildings, blocks = reblock2.load_reblock_inputs(region, gadm_code, gadm)
 # planar_graph = PlanarGraph.multilinestring_to_planar_graph(parcel_geom)
@@ -101,4 +138,5 @@ def reblock_gadm(region, gadm_code, gadm, simplify, cost_fn, block_list=None):
 # planar_graph.set_edge_width(bldg_polys)
 
 # planar_graph, num_components = reblock2.clean_graph(planar_graph)
+
 

@@ -24,9 +24,11 @@ class BasePathCost(ABC):
 
     @abstractmethod
     def __call__(self, 
-                 g: i_topology.PlanarGraph,
-                 path_seq: igraph.EdgeSeq,
-                 return_compnents = False ) -> float:
+                 g: i_topology.PlanarGraph, 
+                 cur_v: igraph.Vertex,
+                 next_v: igraph.Vertex,
+                 prev_v: igraph.Vertex = None,
+                 return_components: bool = False) -> float:
         raise NotImplementedError("Subclass of BasePathCost must implement specific method for calculating the path cost")
 
 
@@ -40,56 +42,52 @@ class FlexCost(BasePathCost):
 
     def __call__(self, 
                  g: i_topology.PlanarGraph, 
-                 path_seq: igraph.EdgeSeq,
-                 return_compnents=False) -> float:
+                 cur_v: igraph.Vertex,
+                 next_v: igraph.Vertex,
+                 prev_v: igraph.Vertex = None,
+                 return_components: bool = False) -> float:
+        path_cost = 0
+        path_cost_components = {}
+
         
         path_cost = 0
         path_cost_components = {}
-        path_length = len(path_seq)
 
-        i = 0
-        for p1, p2 in zip(path_seq[0:-1], path_seq[1:]):
-            v1 = g.vs.select(name=p1)[0]
-            v2 = g.vs.select(name=p2)[0]
+        # Distance mitigated by width
+        if self.lambda_dist > 0:
+            # Euclidean distance
+            distance = g.es.select(_between=([cur_v.index], [next_v.index]))['eucl_dist'][0]
+            dist_cost = self.lambda_dist * distance
 
-            if self.lambda_dist > 0:
-                # Euclidean distance
-                distance = g.es.select(_between=([v1.index], [v2.index]))['eucl_dist'][0]
-                dist_cost = self.lambda_dist * distance
+            # Divided by width, so width mitigates long distance
+            if self.lambda_width:
+                width = g.es.select(_between=([cur_v.index], [next_v.index]))['width'][0]
+                width_scalar = 1 / (self.lambda_width * width)
+            else:
+                width_scalar = 1
+            path_cost += (dist_cost * width_scalar)
+            path_cost_components['dist'] = path_cost_components.get('dist', 0) + dist_cost
+            path_cost_components['width'] = path_cost_components.get('width', 0) + width_scalar
 
-                # Divided by width, so width mitigates long distance
-                if self.lambda_width:
-                    width = g.es.select(_between=([v1.index], [v2.index]))['width'][0]
-                    width_scalar = 1 / (self.lambda_width * width)
-                else:
-                    width_scalar = 1
-                path_cost += (dist_cost * width_scalar)
-                path_cost_components['dist'] = path_cost_components.get('dist', 0) + dist_cost
-                path_cost_components['width'] = path_cost_components.get('width', 0) + width_scalar
+        # Penalize roads which don't have possible 4-way intersection
+        if self.lambda_degree > 0:
+            # Deviation from 4-way intersection
+            dev_from_4 = np.abs(next_v.degree() - 4)
+            if prev_v is None:   # implies we are at beginning
+                dev_from_4 += np.abs(cur_v.degree() - 4)
+            degree_cost = self.lambda_degree * dev_from_4
+            path_cost += degree_cost
+            path_cost_components['degree'] = path_cost_components.get('degree', 0) + degree_cost
 
-            if self.lambda_degree > 0:
-                # Deviation from 4-way intersection
-                dev_from_4 = np.abs(v2.degree() - 4)
-                if i == 0:
-                    dev_from_4 += np.abs(v1.degree() - 4)
-                degree_cost = self.lambda_degree * dev_from_4
-                path_cost += degree_cost
-                path_cost_components['degree'] = path_cost_components.get('degree', 0) + degree_cost
+        # Penalize turns deviating from 180 degrees
+        if self.lambda_turn_angle > 0 and prev_v is not None:
+            turn_angle = cur_v['angles'][(next_v.index, prev_v.index)]
+            turn_angle = np.abs(turn_angle - 180)
+            turn_angle_cost = self.lambda_turn_angle * turn_angle
+            path_cost += turn_angle_cost
+            path_cost_components['turn_angle'] = path_cost_components.get('turn_angle', 0) + turn_angle_cost
 
-            if self.lambda_turn_angle > 0:
-                if i >= 1:
-                    p0 = path_seq[i-1]
-                    v0 = g.vs.select(name=p0)[0]
-                    # We penalize deviations from 180 (i.e. straight)
-                    turn_angle = g.vs[v1.index]['angles'][(v0.index, v2.index)]
-                    turn_angle = np.abs(turn_angle - 180)
-                    turn_angle_cost = self.lambda_turn_angle * turn_angle
-                    path_cost += turn_angle_cost
-                    path_cost_components['turn_angle'] = path_cost_components.get('turn_angle', 0) + turn_angle_cost
-            
-            i += 1
-
-        if return_compnents:
+        if return_components:
             return path_cost, path_cost_components
         else:
             return path_cost 

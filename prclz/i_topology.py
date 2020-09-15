@@ -18,18 +18,18 @@ import pandas as pd
 import geopandas as gpd
 from typing import List, Tuple
 from heapdict import heapdict
-from fib_heap import Fibonacci_heap
+#from fib_heap import Fibonacci_heap
 import tqdm 
 #from path_cost import BasePathCost
 
 '''
 TO-DO:
-- The backwards pass of the Dij. is too slow 
-  and needs to be optimized. Probably we can directly
-  record the edge index when recording the path
-- In making the Dij. fast it now only does basic distance
-  so add back that flexibility
-- Then test on DJI data
+- Doesn't look to be giving preference to existing streets?
+- Test on DJI data
+- Try different loss functions on DJI
+- Build a visualizer
+    - maybe one to include the width of the road,
+      where the road is a polygon rather than linestring...
 '''
 
 # DEFINE GLOBAL PATHS
@@ -40,6 +40,7 @@ BUF_EPS = 1e-4
 BUF_RATE = 2
 
 
+
 def shortest_path(g, 
                   origin_pt: Tuple[float, float], 
                   target_pt: Tuple[float, float], 
@@ -47,7 +48,7 @@ def shortest_path(g,
                   return_epath = True,
                   return_dist = True):
 
-    #print("TEST INSIDE")
+    #print("TEST fdafdafdsa INSIDE")
     
     # Build priority queue
     Q = heapdict()
@@ -60,7 +61,7 @@ def shortest_path(g,
             d = np.inf
             path = None
         v['_dji_dist'] = d 
-        v['_dji_path'] = path 
+        v['_dji_prev_idx'] = path 
         v['_visited'] = False
         if v['name'] == origin_pt:
             Q[v] = v['_dji_dist']
@@ -71,122 +72,60 @@ def shortest_path(g,
     cur_v, _ = Q.popitem()
     #cur_v = Q.dequeue_min().get_value()
     cur_pt = cur_v['name']
+    start_idx = cur_v.index
     while cur_pt != target_pt:
         #print("cur_pt = {}".format(cur_pt))
-        for n in cur_v.neighbors():
+        for next_v in cur_v.neighbors():
             #print("\tneighbor = {}".format(n['name']))
-            if n['_visited']:
+            if next_v['_visited']:
                 #print("\t\talready visited -- continue")
                 continue
             else:
-                #new_path = cur_v['_dji_path'][:] + [n['name']]
-                #marg_path = cur_v['_dji_path'][-1:] + [n['name']]
-                # if len(cur_v['_dji_path']) > 1:
-                #     marg_path.insert(0, cur_v['_dji_path'][-2])
-                # #new_dist = cost_fn(g, new_path)
-                #marg_dist = cost_fn(g, marg_path)
-                marg_dist = distance(cur_pt, n['name'])
+                if cur_v['_dji_prev_idx'] is None:
+                    prev_v = None
+                else:
+                    prev_v = g.vs[cur_v['_dji_prev_idx']]
+                marg_dist = cost_fn(g, cur_v, next_v, prev_v)
+                #marg_dist = distance(cur_pt, next_v['name'])
                 new_dist = marg_dist + cur_v['_dji_dist']
-                if new_dist < n['_dji_dist']:
-                    # print("\t\tresetting path {} to {}".format(cur_v['_dji_path'], cur_v.index))
+                if new_dist < next_v['_dji_dist']:
+                    # print("\t\tresetting path {} to {}".format(cur_v['_dji_prev_idx'], cur_v.index))
                     # print("\t\tdist from {} to {}".format(n['_dji_dist'], new_dist))
-                    n['_dji_dist'] = new_dist
-                    n['_dji_path'] = cur_v.index
+                    next_v['_dji_dist'] = new_dist
+                    next_v['_dji_prev_idx'] = cur_v.index
 
                     # Update the priority in Q
-                    Q[n] = new_dist 
-                    # if n['_ref'] is not None:
-                    #     #print("Decreasing {} to {}".format(n['_ref'], new_dist))
-                    #     Q.decrease_key(n['_ref'], new_dist)
-                    # else:
-                    #     #print("Adding to queue")
-                    #     n['_ref'] = Q.enqueue(n, n['_dji_dist'])
+                    Q[next_v] = new_dist 
                     
         cur_v['_visited'] = True
         cur_v, _ = Q.popitem()
         #cur_v = Q.dequeue_min().get_value()
         cur_pt = cur_v['name']
+        cur_idx = cur_v.index 
 
     #print("Found {} at {}: go back to idx {}".format(target_pt, cur_pt, cur_v['_dji_path']))
 
     # Clean up returned output
     rv = []
     if return_epath:
-        vpath_names = []
-        while cur_pt != origin_pt:
-            vpath_names.append(cur_pt)
-            prev_idx = cur_v['_dji_path']
-            #print("back tracking to {}".format(prev_idx))
-            if prev_idx is None:
-                print("origin_pt = {} | target_pt = {}".format(origin_pt, target_pt))
-                print("path is: {}".format(vpath_names))
-            cur_v = g.vs[prev_idx]
-            cur_pt = cur_v['name']
-        #vpath_names = g.vs.select(name=target_pt)['_dji_path'][0]
-        epath_edges = g.coord_path_to_edge_path(vpath_names)
-        epath_indices = [e.index for e in epath_edges]
+        vpath_indices = []
+        epath_indices = []
+        while cur_idx != start_idx:
+            vpath_indices.append(cur_idx)
+            parent_idx = cur_v['_dji_prev_idx']
+            #print("Goal = {} | Between v{}-v{}".format(start_idx, cur_idx, parent_idx))
+            cur_e = g.es.find(_between=((cur_idx,), (parent_idx,))).index
+            #print("Between v{}-v{} is edge {}\n".format(cur_idx, parent_idx, cur_e))
+            epath_indices.append(cur_e)
+            cur_v = g.vs[parent_idx]
+            cur_idx = cur_v.index
         rv.append(epath_indices)
+
     if return_dist:
         vpath_dist = g.vs.select(name=target_pt)['_dji_dist'][0]
         rv.append(vpath_dist)
     return rv 
 
-# def shortest_path(g, 
-#                   origin_pt: Tuple[float, float], 
-#                   target_pt: Tuple[float, float], 
-#                   cost_fn,
-#                   return_epath = True,
-#                   return_dist = True):
-    
-#     # Create bool attr for visited
-#     g.vs['visited'] = False
-
-#     # Create dist attr
-#     g.vs['_dji_dist'] = np.inf 
-#     g.vs['_dji_path'] = [[]*len(g.vs['_dji_dist'])]
-#     g.vs.select(name=origin_pt)['_dji_dist'] = 0
-#     g.vs.select(name=origin_pt)['_dji_path'] = [[origin_pt]]
-
-#     # Initialize current node
-#     cur_pt = origin_pt
-#     cur_v = g.vs.select(name=cur_pt)[0]
-#     while cur_pt != target_pt:
-#         #print("cur_pt = {}".format(cur_pt))
-#         for n in cur_v.neighbors():
-#             #print("\tneighbor = {}".format(n['name']))
-#             if n['visited']:
-#                 #print("\t\talready visited -- continue")
-#                 continue
-#             else:
-#                 new_path = cur_v['_dji_path'][:] + [n['name']]
-#                 marg_path = cur_v['_dji_path'][-1:] + [n['name']]
-#                 if len(cur_v['_dji_path']) > 1:
-#                     marg_path.insert(0, cur_v['_dji_path'][-2])
-#                 #new_dist = cost_fn(g, new_path)
-#                 marg_dist = cost_fn(g, marg_path)
-#                 new_dist = marg_dist + cur_v['_dji_dist']
-#                 if new_dist < n['_dji_dist']:
-#                     #print("\t\tresetting path {} to {}".format(cur_v['_dji_path'][:], new_path))
-#                     #print("\t\tdist from {} to {}".format(n['_dji_dist'], new_dist))
-#                     n['_dji_dist'] = new_dist
-#                     n['_dji_path'] = new_path 
-                    
-#         cur_v['visited'] = True
-#         argmin = np.argmin([x['_dji_dist'] for x in g.vs.select(visited=False)])
-#         cur_v = list(g.vs.select(visited=False))[argmin]
-#         cur_pt = cur_v['name']
-
-#     # Clean up returned output
-#     rv = []
-#     if return_epath:
-#         vpath_names = g.vs.select(name=target_pt)['_dji_path'][0]
-#         epath_edges = g.coord_path_to_edge_path(vpath_names)
-#         epath_indices = [e.index for e in epath_edges]
-#         rv.append(epath_indices)
-#     if return_dist:
-#         vpath_dist = g.vs.select(name=target_pt)['_dji_dist'][0]
-#         rv.append(vpath_dist)
-#     return rv 
 
 def build_weighted_complete_graph(G: igraph.Graph, 
                                   terminal_vertices: igraph.EdgeSeq,
@@ -784,7 +723,7 @@ class PlanarGraph(igraph.Graph):
         igraph.plot(self, output_file, **visual_style)
 
 
-    def get_steiner_linestrings(self) -> MultiLineString:
+    def get_steiner_linestrings(self, expand=True) -> MultiLineString:
         '''
         Takes the Steiner optimal edges from g and converts them
         '''
@@ -794,9 +733,9 @@ class PlanarGraph(igraph.Graph):
             if e['steiner']:
                 #if e['edge_type'] == 'highway':
                 if e['weight'] == 0:
-                    existing_lines.append(LineString(self.edge_to_coords(e, True)))
+                    existing_lines.append(LineString(self.edge_to_coords(e, expand)))
                 else:
-                    new_lines.append(LineString(self.edge_to_coords(e, True)))
+                    new_lines.append(LineString(self.edge_to_coords(e, expand)))
 
         #lines = [LineString(self.edge_to_coords(e)) for e in self.es if e['steiner']]
         new_multi_line = unary_union(new_lines)
