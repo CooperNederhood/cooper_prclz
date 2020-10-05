@@ -2,14 +2,15 @@ import os
 import geopandas as gpd 
 import pandas as pd 
 from pathlib import Path 
-from typing import Callable
+from typing import Callable, List, Dict 
+from shapely.ops import unary_union
 
 from i_topology import PlanarGraph
-from i_topology_utils import csv_to_geo
+from i_topology_utils import csv_to_geo, update_edge_types
 from i_reblock import add_buildings, clean_graph
 from i_reblock import add_outside_node, drop_buildings_intersecting_block
 from path_cost import FlexCost
-
+import simplify_reblock
 
 # Should just import the setup_paths.py script (eventually)
 ROOT = Path("/home/cooper/Documents/chicago_urban/mnp/cooper_prclz")
@@ -55,32 +56,69 @@ def load_reblock_inputs(region: str, gadm_code: str, gadm: str):
     return parcels_df, buildings_df, blocks_df 
 
 
-def reblock_gadm(region, gadm_code, gadm, cost_fn, block_list=None):
+def reblock_gadm(
+    region: str, 
+    gadm_code: str, 
+    gadm: str, 
+    cost_fn: Callable, 
+    return_metric_closures: bool = True,
+    return_planar_graphs: bool = True, 
+    through_street_cutoff: float = 0.0,
+    simplify_new_roads: bool = False,
+    block_list: List[str] = None,
+    ):
 
+    # Load inputs
     parcels, buildings, blocks = load_reblock_inputs(region, gadm_code, gadm)
 
     if block_list is None:
         block_list = blocks['block_id'].values
 
-    reblock_data = {'geometry': [], 'line_type': []}
+    reblock_data = {'geometry': [], 'line_type': [], 'block_id': []}
+    reblock_poly_data = {'geometry': [], 'line_type': [], 'block_id': []}
+    metric_closures = {}
+    planar_graphs = {}
 
     for block_id in block_list:
         print("Reblocking {}".format(block_id))
-        reblock_data, planar_graph = reblock_block_id(parcels, buildings, blocks, 
-                                        block_id, cost_fn, reblock_data)
+        reblock_data, reblock_poly_data, planar_graph, metric_closure = reblock_block_id(
+                                                                         parcels, buildings, blocks, 
+                                                                         block_id, cost_fn, 
+                                                                         reblock_data=reblock_data, 
+                                                                         reblock_poly_data=reblock_poly_data,
+                                                                         return_metric_closure=return_metric_closures,
+                                                                         simplify_new_roads=simplify_new_roads,
+                                                                         through_street_cutoff=through_street_cutoff)
+        if return_metric_closures:
+            metric_closures[block_id] = metric_closure
+        if return_planar_graphs:
+            planar_graphs[block_id] = planar_graph
     
-    reblock_data = gpd.GeoDataFrame.from_dict(reblock_data)
-    return reblock_data, parcels, buildings, blocks
+    #reblock_data = gpd.GeoDataFrame.from_dict(reblock_data)
+    #reblock_poly_data = gpd.GeoDataFrame.from_dict(reblock_poly_data)
+    rv = [reblock_data, reblock_poly_data, parcels, buildings, blocks]
+
+    if return_metric_closures: 
+        rv.append(metric_closures)
+    if return_planar_graphs:
+        rv.append(planar_graphs)
+    return rv 
 
 def reblock_block_id(parcels: gpd.GeoDataFrame, 
                      buildings: pd.DataFrame,
                      blocks: gpd.GeoDataFrame,
                      block_id: str,
                      cost_fn: Callable,
-                     reblock_data = None):
+                     return_metric_closure: bool = True,
+                     simplify_new_roads: bool = False,
+                     through_street_cutoff: float = 0.0,
+                     reblock_data: Dict = None,
+                     reblock_poly_data: Dict = None):
 
     if reblock_data is None:
-        reblock_data = {'geometry': [], 'line_type': []}
+        reblock_data = {'geometry': [], 'line_type': [], 'block_id': []}
+    if reblock_poly_data is None:
+        reblock_poly_data = {'geometry': [], 'line_type': [], 'block_id': []}
 
     # (0) Get data for the block
     parcel_geom = parcels[parcels['block_id']==block_id]['geometry'].iloc[0]
@@ -112,17 +150,43 @@ def reblock_block_id(parcels: gpd.GeoDataFrame,
     # (6) Update the planar graph if the cost_fn needs it
     if cost_fn.lambda_turn_angle > 0:
         planar_graph.set_node_angles()
-    if cost_fn.lambda_width > 0:
+    #if cost_fn.lambda_width > 0:
+    if True:
         bldg_polys = buildings[buildings['block_id']==block_id]['geometry'].iloc[0]
         planar_graph.set_edge_width(bldg_polys)
 
-    # (7) Do steiner approximation
-    planar_graph.flex_steiner_tree_approx(cost_fn = cost_fn)
-    new_steiner, existing_steiner = planar_graph.get_steiner_linestrings(expand=False)
-    reblock_data['geometry'] += [new_steiner, existing_steiner]
-    reblock_data['line_type'] += ['new', 'existing']
+    # (7) The current existing roads should have 0 weight
+    missing, total_block_coords = update_edge_types(planar_graph, block_geom, check=True)
 
-    return reblock_data, planar_graph 
+    # (8) Do steiner approximation
+    metric_closure = planar_graph.flex_steiner_tree_approx(cost_fn = cost_fn, return_metric_closure=return_metric_closure)
+    
+    # (9) Add through-streets, if enabled
+    if through_street_cutoff > 0:
+        through_lines = simplify_reblock.get_through_lines(planar_graph,
+                                                           metric_closure,
+                                                           through_street_cutoff,
+                                                           cost_fn,
+                                                           )        
+    # (10) Get the linestrings 
+    new_lines, existing_lines, new_polys, existing_polys = planar_graph.get_steiner_linestrings(expand=False, 
+                                                                        return_polys=True)
+    
+
+    # (11) Simplify new road geometries
+    if simplify_new_roads:
+        new_lines = simplify_reblock.simplify_reblocked_graph(planar_graph)
+        new_lines = unary_union(new_lines)
+
+    reblock_data['geometry'] += [new_lines, existing_lines]
+    reblock_data['line_type'] += ['new', 'existing']
+    reblock_data['block_id'] += [block_id, block_id ]
+    
+    reblock_poly_data['geometry'] += [new_polys, existing_polys]
+    reblock_poly_data['line_type'] += ['new', 'existing']
+    reblock_poly_data['block_id'] += [block_id, block_id ]
+
+    return reblock_data, reblock_poly_data, planar_graph, metric_closure 
 
 
 # # #cost_fn = reblock2.FlexCost(lambda_width=1.0,lambda_degree=200., lambda_turn_angle=2.)

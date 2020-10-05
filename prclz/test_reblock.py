@@ -1,9 +1,12 @@
 import i_topology
 import geopandas as gpd 
+from pathlib import Path 
 import reblock2
 from path_cost import FlexCost
 import copy 
 from shapely.geometry import LineString, MultiPolygon, Polygon, MultiLineString, Point, MultiPoint, LineString
+from typing import Callable, List 
+import simplify_reblock 
 
 def make_square(lower_left_pt, w=1):
     pts = []
@@ -76,6 +79,21 @@ def get_test_grids():
     grids = {2: grid2, 3: grid3, 4: grid4}
     return grids 
 
+def plot_dji_test(block, output_filename):
+    block_parcel = parcels[parcels['block_id']==block]
+    block_bldgs = bldgs
+    
+    ax = block_parcel.plot(color='black', alpha=0.3)
+    ax = block_bldgs.plot(color='black', ax=ax)
+    reblock_new = reblock_data[reblock_data['line_type']=='new']
+    reblock_existing = reblock_data[reblock_data['line_type']=='existing']
+
+    ax = reblock_existing.plot(color='green', ax=ax)
+    ax = reblock_new.plot(color='red', ax=ax)
+    ax = reblock_poly_data.plot(color='black', alpha=0.3, ax=ax)
+    #ax.figure.savefig(str(Path("./test_dir") / output_filename))
+    return ax
+
 # # (1) Original reblocking
 # test_grids = get_test_grids()
 # for n, grid in test_grids.items():
@@ -122,46 +140,83 @@ def get_test_grids():
 
 
 
-# # (6) Test on DJI data
-def plot_dji_test(block, output_filename):
-    block_parcel = parcels[parcels['block_id']==block]
-    block_bldgs = bldgs
-    
-    ax = block_parcel.plot(color='black', alpha=0.3)
-    ax = block_bldgs.plot(color='black', ax=ax)
-    reblock_new = reblock_data[reblock_data['line_type']=='new']
-    reblock_existing = reblock_data[reblock_data['line_type']=='existing']
-
-    ax = reblock_new.plot(color='green', ax=ax)
-    ax = reblock_existing.plot(color='red', ax=ax)
-    return ax
-
 region = 'Africa'
 gadm_code = 'DJI'
 gadm = 'DJI.1.1_1'
 block_list = ['DJI.1.1_1_1']
 
-cost_fn = FlexCost()
-reblock_data, parcels, buildings, blocks =  reblock2.reblock_gadm(region, gadm_code, gadm, cost_fn, block_list=block_list)
-bldgs = gpd.read_file('../data/buildings/Africa/DJI/buildings_DJI.1.1_1.geojson')
+# # (6) Baseline Test on DJI data
+# cost_fn = FlexCost()
+# reblock_data, reblock_poly_data, parcels, buildings, blocks =  reblock2.reblock_gadm(region, gadm_code, 
+#                                                                                     gadm, cost_fn, 
+#                                                                                     block_list=block_list,
+#                                                                                     return_metric_closures=False,
+#                                                                                     return_planar_graphs=False)
+# reblock_data = gpd.GeoDataFrame.from_dict(reblock_data)                                                                                   
+# reblock_poly_data = gpd.GeoDataFrame.from_dict(reblock_poly_data)                                                                                  
 
-ax = plot_dji_test('DJI.1.1_1_1', 'dji_test.png')
+# bldgs = gpd.read_file('../data/buildings/Africa/DJI/buildings_DJI.1.1_1.geojson')
+# ax_baseline = plot_dji_test('DJI.1.1_1_1', 'dji_test.png')
+
+# (7) Baseline + width
+# cost_fn = FlexCost(lambda_width = 1.0)
+# reblock_output =  reblock2.reblock_gadm(region, gadm_code, gadm, cost_fn, 
+#                                         block_list=block_list,
+#                                         return_metric_closures=True,
+#                                         return_planar_graphs=True)
+# reblock_data, reblock_poly_data, parcels, buildings, blocks, metric_closures, planar_graphs = reblock_output
+# bldgs = gpd.read_file('../data/buildings/Africa/DJI/buildings_DJI.1.1_1.geojson')
+# reblock_data = gpd.GeoDataFrame.from_dict(reblock_data)                                                                                   
+# reblock_poly_data = gpd.GeoDataFrame.from_dict(reblock_poly_data)                                                                                  
+
+# ax_width = plot_dji_test('DJI.1.1_1_1', 'dji_width_test.png')
+
+# (8) Baseline + width + simplification
+# cost_fn = FlexCost(lambda_width = 1.0)
+# reblock_output =  reblock2.reblock_gadm(region, gadm_code, gadm, cost_fn, 
+#                                         block_list=block_list,
+#                                         return_metric_closures=True,
+#                                         return_planar_graphs=True,
+#                                         simplify_new_roads=True)
+# reblock_data, reblock_poly_data, parcels, buildings, blocks, metric_closures, planar_graphs = reblock_output
+# bldgs = gpd.read_file('../data/buildings/Africa/DJI/buildings_DJI.1.1_1.geojson')
+# reblock_data = gpd.GeoDataFrame.from_dict(reblock_data)                                                                                   
+# reblock_poly_data = gpd.GeoDataFrame.from_dict(reblock_poly_data)                                                                                  
+
+# ax_width = plot_dji_test('DJI.1.1_1_1', 'dji_width_simpl_test.png')
+
+# (9) Baseline + width + thru_streets + simplification
+cost_fn = FlexCost(lambda_width = 1.0)
+reblock_output =  reblock2.reblock_gadm(region, gadm_code, gadm, cost_fn, 
+                                        block_list=block_list,
+                                        return_metric_closures=True,
+                                        return_planar_graphs=True,
+                                        through_street_cutoff=0.7,
+                                        simplify_new_roads=True)
+reblock_data, reblock_poly_data, parcels, buildings, blocks, metric_closures, planar_graphs = reblock_output
+bldgs = gpd.read_file('../data/buildings/Africa/DJI/buildings_DJI.1.1_1.geojson')
+reblock_data = gpd.GeoDataFrame.from_dict(reblock_data)                                                                                   
+reblock_poly_data = gpd.GeoDataFrame.from_dict(reblock_poly_data)                                                                                  
+
+ax_width = plot_dji_test('DJI.1.1_1_1', 'dji_width_thrustr_simpl_test.png')
+
+
 
 # parcels, buildings, blocks = reblock2.load_reblock_inputs(region, gadm_code, gadm)
 
-# block_id = buildings['block_id'].iloc[0]
-# parcel_geom = parcels[parcels['block_id']==block_id]['geometry'].iloc[0]
-# building_list = buildings[buildings['block_id']==block_id]['buildings'].iloc[0]
-# block_geom = blocks[blocks['block_id']==block_id]['geometry'].iloc[0]
+# # (1) Do the initial reblocking
+# rv = reblock2.reblock_block_id(parcels, 
+#                      buildings,
+#                      blocks,
+#                      block_id = block_list[0],
+#                      cost_fn = cost_fn,
+#                      return_metric_closure = True,
+#                      reblock_data = None,
+#                      reblock_poly_data = None)
 
-# planar_graph = i_topology.PlanarGraph.multilinestring_to_planar_graph(parcel_geom)
-# bldg_tuples = [list(b.coords)[0] for b in building_list]
-# planar_graph = reblock2.add_buildings(planar_graph, bldg_tuples)
-# planar_graph.set_node_angles()
-# bldg_polys = buildings[buildings['block_id']==block_id]['geometry'].iloc[0]
-# planar_graph.set_edge_width(bldg_polys)
-# planar_graph, num_components = reblock2.clean_graph(planar_graph)
-# planar_graph.flex_steiner_tree_approx(cost_fn = cost_fn)
+# reblock_data, reblock_poly_data, planar_graph, metric_closure = rv
 
-# new_steiner, existing_steiner = planar_graph.get_steiner_linestrings(expand=False)
-
+# # (2) Now add some through streets
+# ratio_cutoff = 0.7
+# through_lines = simplify_reblock.get_through_lines(planar_graph, metric_closure, 
+#                                                    ratio_cutoff, cost_fn)

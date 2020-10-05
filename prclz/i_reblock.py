@@ -1,10 +1,10 @@
 import typing
-from typing import List, Tuple  
+from typing import List, Tuple, Callable
 
 from pathlib import Path 
 import geopandas as gpd
 from shapely.geometry import MultiPolygon, Polygon, MultiLineString, Point, LineString
-from shapely.ops import cascaded_union, polygonize
+from shapely.ops import cascaded_union, polygonize, unary_union
 from shapely.wkt import loads, dumps
 import pandas as pd
 import numpy as np 
@@ -19,12 +19,14 @@ import igraph
 
 import i_topology_utils
 from i_topology import *
+import i_topology
 import time 
 import tqdm 
 
 # DEFINE GLOBAL PATHS
 sys.path.insert(0, "../")
 from data_processing.setup_paths import *
+
 
 def block_to_gadm(block:str) -> str:
     '''

@@ -6,7 +6,7 @@ from itertools import combinations, chain, permutations
 from functools import reduce 
 import pickle 
 import os 
-from shapely.geometry import LineString, MultiPolygon, Polygon, MultiLineString, Point, MultiPoint, LineString
+from shapely.geometry import LineString, LinearRing, MultiPolygon, Polygon, MultiLineString, Point, MultiPoint, LineString
 from shapely.ops import cascaded_union, unary_union
 from shapely.wkt import loads
 import time 
@@ -24,8 +24,6 @@ import tqdm
 
 '''
 TO-DO:
-- Doesn't look to be giving preference to existing streets?
-- Test on DJI data
 - Try different loss functions on DJI
 - Build a visualizer
     - maybe one to include the width of the road,
@@ -39,6 +37,20 @@ from data_processing.setup_paths import *
 BUF_EPS = 1e-4
 BUF_RATE = 2
 
+def map_pts(pt_list, pt0, pt1):
+    '''
+    Helper function, assigns each pt in pt_list to whichever
+    node it's closer to btwn u and v
+    '''
+    pt0_assign = []
+    pt1_assign = []
+    for pt in pt_list:
+        if distance(pt, pt0) < distance(pt, pt1):
+            pt0_assign.append(pt)
+        else:
+            pt1_assign.append(pt)
+    assert len(pt0_assign) == len(pt1_assign), "Lens are not the same -- should be equal"
+    return pt0_assign, pt1_assign
 
 
 def shortest_path(g, 
@@ -132,6 +144,7 @@ def build_weighted_complete_graph(G: igraph.Graph,
                                   cost_fn):
     H = PlanarGraph()
     combs_list = list(combinations(terminal_vertices, 2))
+    print("Building metric closure...")
     for u,v in tqdm.tqdm(combs_list, total=len(combs_list)):
     #for u,v in combs_list:
         if not isinstance(u, tuple):
@@ -148,7 +161,8 @@ def build_weighted_complete_graph(G: igraph.Graph,
 
 def flex_steiner_tree(G: igraph.Graph, 
                       terminal_vertices: igraph.EdgeSeq,
-                      cost_fn):
+                      cost_fn,
+                      return_metric_closure: bool = False):
     '''
     terminal_nodes is List of igraph.Vertex
     '''
@@ -167,7 +181,10 @@ def flex_steiner_tree(G: igraph.Graph,
     # Now, we join the paths for all the mst_edge_idxs
     steiner_edge_idxs = list(chain.from_iterable(H.es[i]['path'] for i in mst_edge_idxs))
 
-    return steiner_edge_idxs
+    if return_metric_closure:
+        return steiner_edge_idxs, H
+    else:
+        return steiner_edge_idxs
 
 def shortest_path_orig(g, 
                   origin_pt, 
@@ -360,8 +377,6 @@ def vector_projection(edge_tuple, coords):
 
 
 class PlanarGraph(igraph.Graph):
-    def __init__(self):
-        super().__init__()
 
     @staticmethod
     def from_edges(edges):
@@ -676,7 +691,8 @@ class PlanarGraph(igraph.Graph):
             self.es[i]['steiner'] = True 
 
     def flex_steiner_tree_approx(self, 
-                                 cost_fn):
+                                 cost_fn, 
+                                 return_metric_closure: bool = True):
         '''
         All Nodes within the graph have an attribute, Node.terminal, which is a boolean
         denoting whether they should be included in the set of terminal_nodes which
@@ -684,11 +700,22 @@ class PlanarGraph(igraph.Graph):
         '''
         terminal_nodes = self.vs.select(terminal_eq=True)
 
-        steiner_edge_idxs = flex_steiner_tree(self, 
-                                              terminal_nodes, 
-                                              cost_fn = cost_fn)
+        rv = flex_steiner_tree(self, 
+                               terminal_nodes, 
+                               cost_fn = cost_fn,
+                               return_metric_closure = return_metric_closure)
+
+        if return_metric_closure:
+            steiner_edge_idxs, metric_closure = rv
+        else:
+            steiner_edge_idxs = rv  
+            metric_closure = None  
+
         for i in steiner_edge_idxs:
             self.es[i]['steiner'] = True 
+
+        return metric_closure
+
 
     def plot_reblock(self, output_file, visual_style=None):
 
@@ -722,25 +749,105 @@ class PlanarGraph(igraph.Graph):
         #print("visual_style = {}".format(visual_style))
         igraph.plot(self, output_file, **visual_style)
 
+    # def buffer_by_width(self, 
+    #                     e: igraph.Edge, 
+    #                     e_path: LineString = None,
+    #                     expand: bool = False) -> Polygon:
+    #     if e_path is None:
+    #         e_path = LineString(self.edge_to_coords(e,expand))
+    #     w = e['width']
+    #     path_left = list(e_path.parallel_offset(w, 'left').coords)
+    #     path_right = list(e_path.parallel_offset(w, 'right').coords)
+    #     poly_pts = path_left + path_right
+    #     poly = Polygon(poly_pts)
+    #     return poly
 
-    def get_steiner_linestrings(self, expand=True) -> MultiLineString:
+    def get_steiner_linestrings(self, 
+                                expand=True,
+                                return_polys=False,
+                                edge_seq: igraph.EdgeSeq = None) -> MultiLineString:
         '''
         Takes the Steiner optimal edges from g and converts them
+
+        If return_polys==True, will retur
         '''
         existing_lines = []
         new_lines = []
-        for e in self.es:
-            if e['steiner']:
+        
+        existing_polys = []
+        new_polys = []
+        
+        self.vs['_tmp_pts'] = None 
+        if edge_seq is None:
+            edge_seq = self.es 
+        for e in edge_seq:
+
+            if 'is_through_line' in self.es.attributes():
+                is_opt = e['steiner'] or e['is_through_line']
+            else:
+                is_opt = e['steiner']
+            
+            if is_opt:
                 #if e['edge_type'] == 'highway':
+                path = LineString(self.edge_to_coords(e, expand))
                 if e['weight'] == 0:
-                    existing_lines.append(LineString(self.edge_to_coords(e, expand)))
+                    existing_lines.append(path)
                 else:
-                    new_lines.append(LineString(self.edge_to_coords(e, expand)))
+                    new_lines.append(path)
+
+                if return_polys:
+                    #poly = self.buffer_by_width(e, e_path=path, expand=expand)
+                    w = e['width']
+                    path_left = list(path.parallel_offset(w, 'left').coords)
+                    path_right = list(path.parallel_offset(w, 'right').coords)
+                    poly_pts = path_left + path_right
+                    poly = Polygon(poly_pts)
+                    
+                    # Now add the pts to the vertex
+                    v0, v1 = e.vertex_tuple
+                    v0_assign, v1_assign = map_pts(poly_pts, v0['name'], v1['name'])
+                    if v0['_tmp_pts'] is None:
+                        v0['_tmp_pts'] = []
+                    if v1['_tmp_pts'] is None:
+                        v1['_tmp_pts'] = []
+                    v0['_tmp_pts'].extend(v0_assign)
+                    v1['_tmp_pts'].extend(v1_assign)
+
+                    if e['weight'] == 0:
+                        existing_polys.append(poly)
+                    else:
+                        new_polys.append(poly)
+        
+        if return_polys:
+            for e in edge_seq:
+                if 'is_through_line' in self.es.attributes():
+                    is_opt = e['steiner'] or e['is_through_line']
+                else:
+                    is_opt = e['steiner']
+                #if e['steiner']:
+                if is_opt:
+                    v0, v1 = e.vertex_tuple
+                    for v in [v0, v1]:
+                        if len(v['_tmp_pts']) == 4:
+                            pts = v['_tmp_pts']
+                            rect = Polygon(v['_tmp_pts']).convex_hull
+                            
+                            if e['weight'] == 0:
+                                existing_polys.append(rect)
+                            else:
+                                new_polys.append(rect)    
 
         #lines = [LineString(self.edge_to_coords(e)) for e in self.es if e['steiner']]
-        new_multi_line = unary_union(new_lines)
-        existing_multi_line = unary_union(existing_lines)
-        return new_multi_line, existing_multi_line
+        new_lines = unary_union(new_lines)
+        existing_lines = unary_union(existing_lines)
+        
+        if return_polys:
+            new_polys = unary_union(new_polys)
+            existing_polys = unary_union(existing_polys)
+        
+            return new_lines, existing_lines, new_polys, existing_polys
+        else:
+            return new_lines, existing_lines
 
     def get_terminal_points(self) -> MultiPoint:
         '''
@@ -831,6 +938,28 @@ class PlanarGraph(igraph.Graph):
                     path = self.search_continuous_edge(n, visited_indices)
             return visited_indices 
 
+    def to_pieces(self) -> List[List[int]]:
+        '''
+        Creates representation of graph 
+        '''
+
+        piece_list = []
+        all_visited_idxs = set()
+
+        print("Breaking to pieces...")
+        for v in tqdm.tqdm(self.vs):
+            if v.index not in all_visited_idxs:
+                neighbors = v.neighbors()
+                num_neighbors = len(neighbors)
+                if num_neighbors == 2:
+                    cont_vs = self.search_continuous_edge(v)
+                    for v in cont_vs:
+                        all_visited_idxs.add(v)
+                    piece_list.append(cont_vs)
+        return piece_list 
+
+
+
     def simplify_edge_width(self):
         '''
         Resets edge width to be the min over
@@ -839,7 +968,8 @@ class PlanarGraph(igraph.Graph):
 
         all_visited = set()
 
-        for v in self.vs:
+        print("Simplifying edge width...")
+        for v in tqdm.tqdm(self.vs):
             neighbors = v.neighbors()
             num_neighbors = len(neighbors)
             if num_neighbors == 2:

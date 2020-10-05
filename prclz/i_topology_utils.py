@@ -232,6 +232,7 @@ def update_edge_types(parcel_graph: PlanarGraph, block_polygon: Polygon, check=F
                     parcel_graph.es[path_idxs]['edge_type'] = ft_type
 
     parcel_graph.es.select(edge_type_eq='highway')['weight'] = 0
+    #print("There are {} edges with type highway".format(len(parcel_graph.es.select(edge_type_eq='highway'))))
 
     WATERWAY_WEIGHT = NATURAL_WEIGHT = 1e4  # Not currently active
     parcel_graph.es.select(edge_type_eq='waterway')['weight'] = WATERWAY_WEIGHT

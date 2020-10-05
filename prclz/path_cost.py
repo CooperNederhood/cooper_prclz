@@ -56,15 +56,24 @@ class FlexCost(BasePathCost):
         # Distance mitigated by width
         if self.lambda_dist > 0:
             # Euclidean distance
-            distance = g.es.select(_between=([cur_v.index], [next_v.index]))['eucl_dist'][0]
+            e = g.es.select(_between=([cur_v.index], [next_v.index]))[0]
+            distance = e['eucl_dist']
             dist_cost = self.lambda_dist * distance
 
             # Divided by width, so width mitigates long distance
             if self.lambda_width:
-                width = g.es.select(_between=([cur_v.index], [next_v.index]))['width'][0]
+                width = e['width']
+                #print("distance = {} | width = {}".format(distance, width))
+                if width == 0:
+                    #print("width == 0")
+                    width = 1e-7
                 width_scalar = 1 / (self.lambda_width * width)
             else:
                 width_scalar = 1
+            if 'edge_type' in e.attributes():
+                if e['edge_type'] == 'highway': # Already existing road
+                    dist_cost = 0
+                    width_scalar = 1
             path_cost += (dist_cost * width_scalar)
             path_cost_components['dist'] = path_cost_components.get('dist', 0) + dist_cost
             path_cost_components['width'] = path_cost_components.get('width', 0) + width_scalar
