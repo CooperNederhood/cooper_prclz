@@ -201,8 +201,28 @@ reblock_poly_data = gpd.GeoDataFrame.from_dict(reblock_poly_data)
 ax_width = plot_dji_test('DJI.1.1_1_1', 'dji_width_thrustr_simpl_test.png')
 
 
+# def add_buildings(parcel_poly_df: gpd.GeoDataFrame, 
+#                   building_list: List[Point],
+#                   planar_graph: i_topology.PlanarGraph,
+#                   ):
 
-# parcels, buildings, blocks = reblock2.load_reblock_inputs(region, gadm_code, gadm)
+#     def cost_fn(centroid: Point, edge: igraph.Edge) -> float:
+#         dist = LineString(planar_graph.edge_to_coords(edge)).distance(centroid)
+#         width = edge['width']
+#         return dist + dist / width 
+
+#     bldg_gdf = gpd.GeoDataFrame.from_dict({'geometry': building_list})
+#     bldg_joined = gpd.sjoin(bldg_gdf, parcel_poly_df, how='left')
+
+#     for _, (centroid, parcel_id) in bldg_joined[['geometry', 'parcel_id']].iterrows():
+#         edge_seq = planar_graph.edges_in_parcel(parcel_id)
+#         edge_cost = map(lambda e: cost_fn(centroid, e), edge_seq)
+#         argmin = np.argmin(list(edge_cost))
+
+#         closest_edge = edge_seq[argmin]
+#         planar_graph.add_bldg_centroid(centroid, closest_edge)
+
+# t_parcels, t_buildings, t_blocks = reblock2.load_reblock_inputs(region, gadm_code, gadm)
 
 # # (1) Do the initial reblocking
 # rv = reblock2.reblock_block_id(parcels, 

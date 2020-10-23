@@ -1,10 +1,14 @@
 import os 
 import geopandas as gpd 
 import pandas as pd 
+import numpy as np
+import igraph
 from pathlib import Path 
 from typing import Callable, List, Dict 
-from shapely.ops import unary_union
+from shapely.ops import unary_union, polygonize
+from shapely.geometry import MultiPolygon, Polygon, MultiLineString, Point, LineString
 
+import i_topology
 from i_topology import PlanarGraph
 from i_topology_utils import csv_to_geo, update_edge_types
 from i_reblock import add_buildings, clean_graph
@@ -25,6 +29,40 @@ BLDGS_PATH = DATA_PATH / "buildings"
 PARCELS_PATH = DATA_PATH / "parcels"
 LINES_PATH = DATA_PATH / "lines"
 COMPLEXITY_PATH = DATA_PATH / "complexity"
+
+def add_buildings_poly(parcel_poly_df: gpd.GeoDataFrame, 
+                    building_list: List[Point],
+                    planar_graph: i_topology.PlanarGraph,
+                  ):
+
+    def cost_fn(centroid: Point, edge: igraph.Edge) -> float:
+        dist = LineString(planar_graph.edge_to_coords(edge)).distance(centroid)
+        return dist 
+        # width = edge['width']
+        # if width == 0:
+        #     return dist 
+        # door_dist = 0.0002 # this is a hyperparameter
+        # if dist > door_dist:
+        #     return 10 + dist 
+        # else:
+        #     return 1 / width #  
+        #return dist 
+
+    if isinstance(building_list[0], tuple):
+        temp = [Point(x) for x in building_list]
+        building_list = temp 
+
+    bldg_gdf = gpd.GeoDataFrame.from_dict({'geometry': building_list})
+    bldg_joined = gpd.sjoin(bldg_gdf, parcel_poly_df, how='left')
+
+    for _, (centroid, parcel_id) in bldg_joined[['geometry', 'parcel_id']].iterrows():
+        edge_seq = planar_graph.edges_in_parcel(parcel_id)
+        #print("Point {} parcel_id {} finds {} edges".format(centroid.wkt, parcel_id, len(edge_seq)))
+        edge_cost = map(lambda e: cost_fn(centroid, e), edge_seq)
+        argmin = np.argmin(list(edge_cost))
+
+        closest_edge = edge_seq[argmin]
+        planar_graph.add_bldg_centroid(centroid, closest_edge)
 
 
 def load_reblock_inputs(region: str, gadm_code: str, gadm: str):
@@ -134,15 +172,35 @@ def reblock_block_id(parcels: gpd.GeoDataFrame,
 
     # (2) And explicitly add a dummy building outside of the block which will force Steiner Alg
     #      to connect to the outside road network
-    building_list = add_outside_node(block_geom, building_list)
+    dummy_bldg = []
+    dummy_bldg = add_outside_node(block_geom, dummy_bldg)
+    #building_list = add_outside_node(block_geom, building_list)
 
     # (3) Convert parcel geometry to planar graph
-    planar_graph = PlanarGraph.multilinestring_to_planar_graph(parcel_geom)
+    if True:
+        parcel_poly_list = list(polygonize(parcel_geom))
+        planar_graph = PlanarGraph.multipolygon_to_planar_graph(parcel_poly_list)
+        test_es = planar_graph.es.select(parcel_id_eq=None)
+        assert len(test_es) == 0, "When creating graph there are some edges not mapped to a parcel"
+        parcel_poly_df = gpd.GeoDataFrame.from_dict({'geometry':parcel_poly_list, 
+                                                     'parcel_id':range(len(parcel_poly_list))
+                                                    })
+    else:
+        planar_graph = PlanarGraph.multilinestring_to_planar_graph(parcel_geom)
+
+    # Because bldg centroid assignment needs width, move that up
+    # but simplify AFTER we add teh building centroids
+    if True:
+        bldg_polys = buildings[buildings['block_id']==block_id]['geometry'].iloc[0]
+        planar_graph.set_edge_width(bldg_polys, simplify=False)
 
     # (4) Add building centroids to the planar graph
     #bldg_tuples = [list(b.coords)[0] for b in building_list]
     #planar_graph = add_buildings(planar_graph, bldg_tuples)
-    planar_graph = add_buildings(planar_graph, building_list)
+    #planar_graph = add_buildings(planar_graph, building_list)
+    add_buildings_poly(parcel_poly_df, building_list, planar_graph)
+    planar_graph = add_buildings(planar_graph, dummy_bldg)
+    planar_graph.set_edge_width(bldg_polys, simplify=True)
 
     # (5) Clean the graph if its disconnected
     planar_graph, num_components = clean_graph(planar_graph)
@@ -150,10 +208,6 @@ def reblock_block_id(parcels: gpd.GeoDataFrame,
     # (6) Update the planar graph if the cost_fn needs it
     if cost_fn.lambda_turn_angle > 0:
         planar_graph.set_node_angles()
-    #if cost_fn.lambda_width > 0:
-    if True:
-        bldg_polys = buildings[buildings['block_id']==block_id]['geometry'].iloc[0]
-        planar_graph.set_edge_width(bldg_polys)
 
     # (7) The current existing roads should have 0 weight
     missing, total_block_coords = update_edge_types(planar_graph, block_geom, check=True)

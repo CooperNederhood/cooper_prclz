@@ -416,6 +416,25 @@ class PlanarGraph(igraph.Graph):
         return pgraph 
 
     @staticmethod
+    def multipolygon_to_planar_graph(multipolygon: MultiPolygon):
+        '''
+        Helper function to convert a Shapely multipolygon
+        to a PlanarGraph
+        '''
+        print("Creating PlanarGraph from multipolygon")
+
+        pgraph = PlanarGraph()
+
+        for parcel_id, polygon in enumerate(multipolygon):
+            nodes = polygon.exterior.coords 
+            for i, n in enumerate(nodes):
+                if i != 0:
+                    pgraph.add_edge(n, prev_n, parcel_id=parcel_id)
+                prev_n = n 
+        return pgraph 
+
+
+    @staticmethod
     def multilinestring_to_planar_graph(multilinestring: MultiLineString):
         '''
         Helper function to convert a Shapely multilinestring
@@ -498,7 +517,9 @@ class PlanarGraph(igraph.Graph):
             elif len(seq) > 1:
                 assert False, "Hacky error - there are duplicate nodes in graph"
 
-    def add_edge(self, coords0, coords1, terminal0=False, terminal1=False, **kwargs):
+    def add_edge(self, coords0, coords1, 
+                 terminal0=False, terminal1=False, 
+                 parcel_id=None, **kwargs):
         '''
         Adds edge to the graph but checks if edge already exists. Also, if either
         coords is not already in the graph, it adds them
@@ -519,6 +540,15 @@ class PlanarGraph(igraph.Graph):
                 kwargs['weight'] = distance(coords0, coords1)
                 kwargs['eucl_dist'] = distance(coords0, coords1)
             super().add_edge(v0[0], v1[0], **kwargs)
+
+        if parcel_id is not None:
+            edge_seq = self.es.select(_between=(v0,v1))
+            if 'parcel_id' not in edge_seq.attributes():
+                self.es['parcel_id'] = None 
+            if edge_seq['parcel_id'][0] is None:
+                edge_seq['parcel_id'] = [{parcel_id}]
+            else:
+                edge_seq['parcel_id'][0].add(parcel_id)    
 
 
     def split_edge_by_node(self, edge_tuple, coords, terminal=False):
@@ -589,6 +619,19 @@ class PlanarGraph(igraph.Graph):
             edge_list.append(edge)
         return edge_list 
 
+    def edges_in_parcel(self, parcel_id: int) -> igraph.EdgeSeq:
+        '''
+        Given a parcel_id, returns edge seq of
+        all edges associated with that parcel. 
+        NOTE: an edge is either in 1-2 parcels
+        '''
+        def fn(e: igraph.Edge):
+            if e['parcel_id'] is None:
+                return False
+            else:
+                return (parcel_id in e['parcel_id'])
+        return self.es.select(fn)
+
     def edge_to_coords(self, edge, expand=False):
         '''
         Given an edge, returns the edge_tuple of
@@ -637,6 +680,23 @@ class PlanarGraph(igraph.Graph):
             i += 1
         #print("Found {}/{} possible edges thru {} tries".format(len(edges), len(self.es), i))
         return edges 
+
+    def add_bldg_centroid(self, pt: Point, e: igraph.Edge):
+        '''
+        Adding the building centroid at pt to the edge, e. First,
+        find the point on e closest to the pt, and that's where
+        we add.
+        '''
+
+        edge_coord_tuple = [v['name'] for v in e.vertex_tuple]
+        pt_coord_tuple = list(pt.coords)[0]
+        #print("edge_coord_tuple: {}".format(edge_coord_tuple))
+        #print("edge_coord_tuple type: {}".format(type(edge_coord_tuple)))
+        closest_node = PlanarGraph.closest_point_to_node(edge_coord_tuple, pt_coord_tuple)
+
+        # Now add it
+        self.split_edge_by_node(edge_coord_tuple, closest_node, terminal=True)
+
 
     def add_node_to_closest_edge(self, coords, terminal=False, fast=True, get_edge=False):
         '''
@@ -748,19 +808,6 @@ class PlanarGraph(igraph.Graph):
 
         #print("visual_style = {}".format(visual_style))
         igraph.plot(self, output_file, **visual_style)
-
-    # def buffer_by_width(self, 
-    #                     e: igraph.Edge, 
-    #                     e_path: LineString = None,
-    #                     expand: bool = False) -> Polygon:
-    #     if e_path is None:
-    #         e_path = LineString(self.edge_to_coords(e,expand))
-    #     w = e['width']
-    #     path_left = list(e_path.parallel_offset(w, 'left').coords)
-    #     path_right = list(e_path.parallel_offset(w, 'right').coords)
-    #     poly_pts = path_left + path_right
-    #     poly = Polygon(poly_pts)
-    #     return poly
 
     def get_steiner_linestrings(self, 
                                 expand=True,
