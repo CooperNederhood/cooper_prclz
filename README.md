@@ -5,7 +5,8 @@
 The GADM data provides boundaries which we use to partition the globe into computationally feasible parts
 From within data_processing/
 ```
-python3 download_gadm.py
+from prclz.data_processing import download_gadm
+download_gadm.update_gadm_data(data_root = "/path/to/your/data/directory/")
 ```
 
 
