@@ -46,7 +46,7 @@ split_geojson.split_buildings(data_root = "/path/to/your/data/directory/", gadm_
 ## Reblocking
 
 ```python
-from prclz.data_processing imoprt setup_paths
+from prclz.data_processing import setup_paths
 from prclz.prclz import i_topology_utils, i_reblock
 
 region = 'Africa'
