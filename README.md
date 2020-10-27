@@ -4,7 +4,7 @@
 #### 1. Download GADM data
 The GADM data provides boundaries which we use to partition the globe into computationally feasible parts
 From within data_processing/
-```
+```python
 from prclz.data_processing import download_gadm
 download_gadm.update_gadm_data(data_root = "/path/to/your/data/directory/")
 ```
@@ -13,8 +13,9 @@ download_gadm.update_gadm_data(data_root = "/path/to/your/data/directory/")
 #### 2. Download Geofabrik data
 We use Geofabrik to get our OpenStreetMap raw data. Download this for all regions via the following command.
 From within data_processing/
-```
-python3 fetch_geofabrik_data.py
+```python
+from prclz.data_processing import fetch_geofabrik_data
+fetch_geofabrik_data.update_geofabrik_data(data_root = "/path/to/your/data/directory/")
 ```
 
 #### 3. Extract buildings and lines from the raw Geofabrik data [SATEJ]
