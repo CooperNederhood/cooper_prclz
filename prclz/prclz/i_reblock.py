@@ -9,6 +9,7 @@ from shapely.wkt import loads, dumps
 import pandas as pd
 import numpy as np 
 import time 
+import tqdm 
 
 import os 
 import matplotlib.pyplot as plt 
@@ -17,15 +18,9 @@ import sys
 import argparse
 import igraph
 
-import i_topology_utils
-from i_topology import *
-import i_topology
-import time 
-import tqdm 
-
-# DEFINE GLOBAL PATHS
-sys.path.insert(0, "../")
-from data_processing.setup_paths import *
+from . import i_topology_utils, i_topology
+from .i_topology import *
+from ..data_processing.setup_paths import *
 
 
 def block_to_gadm(block:str) -> str:
@@ -229,10 +224,46 @@ def add_outside_node(block_geom, building_list):
     building_list.append(outside_building_point.coords[0])
     return building_list 
 
+def reblock_block_id(parcels: gpd.GeoDataFrame, 
+                     buildings: pd.DataFrame,
+                     blocks: gpd.GeoDataFrame,
+                     block_id: str,
+                     ) -> gpd.GeoDataFrame:
+
+    parcel_geom = parcels[parcels['block_id']==block_id]['geometry'].iloc[0]
+    building_list = buildings[buildings['block_id']==block_id]['buildings'].iloc[0]
+    block_geom = blocks[blocks['block_id']==block_id]['geometry'].iloc[0]
+
+    ## UPDATES: drop buildings that intersect with the block border -- they have access
+    if len(building_list) <= 1:
+        return None  
+
+    building_list = drop_buildings_intersecting_block(parcel_geom, building_list, block_geom, block_id)
+
+    ## And explicitly add a dummy building outside of the block which will force Steiner Alg
+    #      to connect to the outside road network
+    building_list = add_outside_node(block_geom, building_list)
+
+    if len(building_list) <= 1:
+        return None  
+
+    # (1) Convert parcel geometry to planar graph
+    planar_graph = PlanarGraph.multilinestring_to_planar_graph(parcel_geom)
+
+    # (2) Update the edge types based on the block graph
+    missing, total_block_coords = i_topology_utils.update_edge_types(planar_graph, block_geom, check=True)
+
+    # (3) Do reblocking 
+    new, existing, terminal_points, summary = get_optimal_path(planar_graph, building_list, 
+                                                                                   simplify=True, verbose=True)
+    df = gpd.GeoDataFrame.from_dict({'geometry': [new, existing]})
+    return df 
+
 def reblock_gadm(region: str, 
                  gadm_code: str, 
                  gadm: str, 
                  simplify: bool, 
+                 data_root: str,
                  block_list: List[str] = None, 
                  only_block_list: List[str] = False, 
                  drop_already_completed: bool = True, 
@@ -321,8 +352,7 @@ def reblock_gadm(region: str,
         # Save out on first iteration and on checkpoint iterations
         if (i == 0) or (i % checkpoint_every == 0):
             checkpointer.save()
-
-             
+    
         i += 1
 
 

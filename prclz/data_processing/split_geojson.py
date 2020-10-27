@@ -13,7 +13,7 @@ import sys
 
 import argparse
 
-from setup_paths import *
+from .setup_paths import build_data_dir, TRANS_TABLE
 
 def geofabrik_to_gadm(geofabrik_name):
     country_info = TRANS_TABLE[TRANS_TABLE['geofabrik_name'] == geofabrik_name]
@@ -319,6 +319,23 @@ the buildings.geojson file. This file is unique per country, and
 thus also identifies which countries to process
 """
 
+def split_buildings(data_root: str, 
+                    gadm_name: str = None,
+                    replace: bool = False,
+                    ) -> None:
+
+    data_paths = build_data_dir(data_root)
+    global TRANS_TABLE    
+    
+    if gadm_name is None:
+        gadm_names = TRANS_TABLE['gadm_name']
+    else:
+        gadm_names = [gadm_name]
+
+    for gadm_name in gadm_names:
+        geofabrik_name = TRANS_TABLE[TRANS_TABLE['gadm_name']==gadm_name]['geofabrik_name'].iloc[0]        
+        file_name = geofabrik_name + "_buildings.geojson"
+        main(file_name, replace, gadm_name)
 
 if __name__ == "__main__":
 

@@ -30,9 +30,7 @@ TO-DO:
       where the road is a polygon rather than linestring...
 '''
 
-# DEFINE GLOBAL PATHS
-sys.path.insert(0, "../")
-from data_processing.setup_paths import *
+from ..data_processing.setup_paths import build_data_dir, TRANS_TABLE
 
 BUF_EPS = 1e-4
 BUF_RATE = 2

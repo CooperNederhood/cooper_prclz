@@ -7,7 +7,7 @@ import os
 import sys 
 import wget
 
-from setup_paths import *
+from .setup_paths import build_data_dir, TRANS_TABLE
 
 
 def urlexists_stream(uri: str) -> bool:
@@ -39,7 +39,10 @@ def make_url(geo_name: str, geo_region: str) -> str:
 
     return url 
 
-def download_data(geofabrik_name: str, geofabrik_region: str) -> None:
+def download_data(geofabrik_name: str, 
+                  geofabrik_region: str,
+                  geofabrik_path: str,
+                  ) -> None:
     '''
     Given a geofabrik country name and the corresponding region, downloads the 
     geofabrik pbf file which contains all OSM data for that country. Checks whether
@@ -50,7 +53,7 @@ def download_data(geofabrik_name: str, geofabrik_region: str) -> None:
 
 
     # Check that we haven't already downloaded it
-    output_path = os.path.join(GEOFABRIK_PATH, geofabrik_region.title())
+    output_path = os.path.join(geofabrik_path, geofabrik_region.title())
     if not os.path.isdir(output_path):
         os.mkdir(output_path)
     if os.path.isfile(os.path.join(output_path, outfile)):
@@ -65,16 +68,18 @@ def download_data(geofabrik_name: str, geofabrik_region: str) -> None:
         else:
             print("\ngeofabrik_name = {} or geofabrik_region = {} are wrong\n".format(geofabrik_name, geofabrik_region))
 
-
-if __name__ == "__main__":
-
-    TRANS_TABLE = TRANS_TABLE[TRANS_TABLE['geofabrik_NA'] != 1]
+def update_geofabrik_data(data_root: str, 
+                          replace: bool = False) -> None:
+    
+    data_paths = build_data_dir(data_root)
+    geofabrik_path = data_paths['geofabrik']
+    global TRANS_TABLE    
 
     names = TRANS_TABLE['geofabrik_name']
     regions = TRANS_TABLE['geofabrik_region']
 
     for geofabrik_name, geofabrik_region in zip(names, regions):
 
-        download_data(geofabrik_name, geofabrik_region)
-
+        download_data(geofabrik_name, geofabrik_region, geofabrik_path)
+   
 
