@@ -58,6 +58,6 @@ block_id = 'DJI.1.1_1_1'
 data_paths = setup_paths.get_example_paths()
 parcels_df, buildings_df, blocks_df = i_topology_utils.load_reblock_inputs(data_paths, region, gadm_code, gadm)
 
-reblocking = i_reblock.reblock_block_id(parcels, buildings, blocks, block_id)
+reblocking = i_reblock.reblock_block_id(parcels_df, buildings_df, blocks_df, block_id)
 ```
 
