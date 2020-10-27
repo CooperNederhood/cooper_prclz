@@ -44,25 +44,20 @@ split_geojson.split_buildings(data_root = "/path/to/your/data/directory/", gadm_
 
 
 ## Reblocking
-There are options for reblocking depending on whether you want to reblock an entire country, just certain GADMs, and just certain blocks. 
 
-##### Reblock entire GADM
-```
-python3 i_reblock.py --region Africa --gadm_name DJI --gadm DJI.1.1_1 --simplify
-         
-```
-##### Process an entire GADM, but put specific blocks first, ahead of other blocks within the GADM
-```
-python3 i_reblock.py --region Africa --gadm_name DJI --gadm DJI.1.1_1 --blocks DJI.1.1_1_2 DJI.1.1_1_4 --simplify
-```
-##### Process only those specific blocks, not the entire GADM
-```
-python3 i_reblock.py --region Africa --gadm_name DJI --gadm DJI.1.1_1 --blocks DJI.1.1_1_2 DJI.1.1_1_4 --simplify --only_block_list
-```
+```python
+from prclz.data_processing imoprt setup_paths
+from prclz.prclz import i_topology_utils, i_reblock
 
-##### Because we have split out inputs by GADM, we can just reblock all the GADMs in a specific directory, essentially reblocking the entire country
-```
-python3 i_reblock.py --region Africa --gadm_name DJI  --gadm DJI.1.1_1 --simplify --from_dir ../data/buildings/Africa/DJI/
-         
+region = 'Africa'
+gadm_code = 'DJI'
+gadm = 'DJI.1.1_1'
+block_id = 'DJI.1.1_1_1'
+
+# Function to return data paths for example data 
+data_paths = setup_paths.get_example_paths()
+parcels_df, buildings_df, blocks_df = i_topology_utils.load_reblock_inputs(data_paths, region, gadm_code, gadm)
+
+reblocking = i_reblock.reblock_block_id(parcels, buildings, blocks, block_id)
 ```
 
