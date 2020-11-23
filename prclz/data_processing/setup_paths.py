@@ -2,7 +2,8 @@ from pathlib import Path
 from typing import Dict 
 import pandas as pd 
 
-TRANS_TABLE = pd.read_csv('./prclz/data_processing/country_codes.csv')
+PRCLZ_ROOT = Path(__file__).parent.parent.absolute()
+TRANS_TABLE = pd.read_csv(str(PRCLZ_ROOT / "data_processing" / "country_codes.csv"))
 
 def build_data_dir(data_root: str) -> Dict:
     '''
@@ -37,7 +38,8 @@ def build_data_dir(data_root: str) -> Dict:
     return data_paths
 
 def get_example_paths() -> Dict:
-    return build_data_dir("prclz/data/")
+
+    return build_data_dir( (PRCLZ_ROOT / "data") )
 
 # # Path to main directory, will need to be set
 # ROOT = Path("/home/cooper/Documents/chicago_urban/mnp/cooper_prclz")

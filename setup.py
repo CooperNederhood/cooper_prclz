@@ -5,13 +5,14 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="prclz", # Replace with your own username
-    version="0.3.0",
+    version="0.5.0",
     author="Example Author",
     author_email="author@example.com",
     description="Code for analysis related to the Million Neighborhoods Project",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    #url="https://github.com/CooperNederhood/cooper_prclz",
+    include_package_data=True,
+    url="https://github.com/CooperNederhood/cooper_prclz",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",

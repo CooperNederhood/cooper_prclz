@@ -17,18 +17,20 @@ from path_cost import FlexCost
 import simplify_reblock
 
 # Should just import the setup_paths.py script (eventually)
-ROOT = Path("/home/cooper/Documents/chicago_urban/mnp/cooper_prclz")
+from ..data_processing.setup_paths import *
 
-# Below this, paths will be automatically set based on ROOT
-DATA_PATH = ROOT / "data"
-GEOFABRIK_PATH = DATA_PATH / "input"
-GEOJSON_PATH = DATA_PATH / "geojson"   
+# ROOT = Path("/home/cooper/Documents/chicago_urban/mnp/cooper_prclz")
 
-BLOCK_PATH = DATA_PATH / "blocks"
-BLDGS_PATH = DATA_PATH / "buildings"
-PARCELS_PATH = DATA_PATH / "parcels"
-LINES_PATH = DATA_PATH / "lines"
-COMPLEXITY_PATH = DATA_PATH / "complexity"
+# # Below this, paths will be automatically set based on ROOT
+# DATA_PATH = ROOT / "data"
+# GEOFABRIK_PATH = DATA_PATH / "input"
+# GEOJSON_PATH = DATA_PATH / "geojson"   
+
+# BLOCK_PATH = DATA_PATH / "blocks"
+# BLDGS_PATH = DATA_PATH / "buildings"
+# PARCELS_PATH = DATA_PATH / "parcels"
+# LINES_PATH = DATA_PATH / "lines"
+# COMPLEXITY_PATH = DATA_PATH / "complexity"
 
 def add_buildings_poly(parcel_poly_df: gpd.GeoDataFrame, 
                     building_list: List[Point],
