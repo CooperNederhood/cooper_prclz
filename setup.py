@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="prclz", # Replace with your own username
-    version="0.5.0",
+    version="0.6.0",
     author="Example Author",
     author_email="author@example.com",
     description="Code for analysis related to the Million Neighborhoods Project",
